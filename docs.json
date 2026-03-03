@@ -1,122 +1,124 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "PAS2",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#5B21B6",
+    "light": "#8B5CF6",
+    "dark": "#4C1D95"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/serhanylmz/pas2"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/serhanylmz/pas2"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "how-it-works"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "concepts/paraphrasing",
+              "concepts/hallucination-detection",
+              "concepts/model-as-judge"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Guides",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Setup",
             "pages": [
-              "api-reference/introduction"
+              "guides/installation",
+              "guides/configuration",
+              "guides/api-keys"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Usage",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "guides/web-interface",
+              "guides/python-library",
+              "guides/benchmarking"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "guides/huggingface-spaces",
+              "guides/local-deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/pas2-class",
+              "api/hallucination-judgment",
+              "api/detector-app"
+            ]
+          },
+          {
+            "group": "Methods",
+            "pages": [
+              "api/generate-paraphrases",
+              "api/detect-hallucination",
+              "api/judge-hallucination"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-usage",
+              "examples/custom-configuration",
+              "examples/batch-processing"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/visualization",
+              "advanced/feedback-system",
+              "advanced/performance-tuning"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "contributing",
+              "changelog",
+              "faq"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

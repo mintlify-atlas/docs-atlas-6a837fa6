@@ -1,0 +1,169 @@
+---
+title: FAQ
+description: Frequently asked questions about the PAS2 hallucination detection system
+---
+
+## General questions
+
+<Accordion title="What is PAS2?">
+PAS2 (Paraphrase-based AI System for Semantic Similarity) is a sophisticated system for detecting hallucinations in AI responses. It uses a paraphrase-based approach with model-as-judge verification to identify factual inconsistencies in LLM outputs.
+</Accordion>
+
+<Accordion title="How does PAS2 detect hallucinations?">
+PAS2 works in three main steps:
+
+1. **Query processing**: Your question is paraphrased multiple ways, each version is sent to Mistral Large, and responses are collected and compared
+2. **Hallucination detection**: OpenAI's o3-mini analyzes responses, identifies factual inconsistencies, and provides confidence scores and reasoning
+3. **Feedback collection**: User feedback is stored in a SQLite database with persistent storage to ensure data survival
+</Accordion>
+
+<Accordion title="What models does PAS2 use?">
+PAS2 uses a multi-model architecture:
+- **Mistral Large**: For generating responses to queries
+- **OpenAI's o3-mini**: As a judge for hallucination detection
+- **Default model**: gpt-4-2024-08-06
+- **Default embedding model**: text-embedding-3-small
+</Accordion>
+
+## Setup and installation
+
+<Accordion title="What are the prerequisites for using PAS2?">
+You need:
+- Python 3.x installed
+- API keys for Mistral AI (`HF_MISTRAL_API_KEY`)
+- API keys for OpenAI (`HF_OPENAI_API_KEY`)
+- Dependencies installed via `pip install -r requirements.txt`
+</Accordion>
+
+<Accordion title="How do I set up my API keys?">
+You can set up API keys in two ways:
+
+1. **Environment variables**:
+   - Set `HF_MISTRAL_API_KEY` for your Mistral AI API key
+   - Set `HF_OPENAI_API_KEY` for your OpenAI API key
+
+2. **`.env` file**:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+</Accordion>
+
+<Accordion title="Can I deploy PAS2 on Hugging Face Spaces?">
+Yes! To deploy on Hugging Face Spaces:
+
+1. Create a new Space on Hugging Face
+2. Select "Gradio" as the SDK
+3. Add your repository
+4. Set the secrets `HF_MISTRAL_API_KEY` and `HF_OPENAI_API_KEY` in your Space's settings
+
+The application uses Hugging Face Spaces' persistent storage (`/data` directory) to maintain feedback data between restarts.
+</Accordion>
+
+## Usage
+
+<Accordion title="How do I run the web interface?">
+Run the Gradio interface with:
+```bash
+python pas2-gradio.py
+```
+
+Then:
+1. Enter a factual question or select from example queries
+2. Click "Detect Hallucinations" to start the analysis
+3. Review the detailed results including hallucination status, confidence score, and reasoning
+4. Provide feedback to help improve the system
+</Accordion>
+
+<Accordion title="How do I use PAS2 as a library?">
+You can use PAS2 programmatically:
+
+```python
+from pas2 import PAS2
+
+detector = PAS2()
+hallucinated, response, questions, answers = detector.detect_hallucination(
+    "your question",
+    n_paraphrases=5,
+    similarity_threshold=0.9,
+    match_percentage_threshold=0.7
+)
+```
+</Accordion>
+
+<Accordion title="Can I run benchmarks with PAS2?">
+Yes! Run the benchmark tool:
+```bash
+python pas2-benchmark.py --json_file your_data.json --num_samples 10
+```
+
+This allows bulk evaluation of queries for testing and analysis purposes.
+</Accordion>
+
+<Accordion title="What output files does PAS2 generate?">
+PAS2 can generate:
+- Similarity matrix plots (PNG)
+- Match matrix plots (PNG)
+- Benchmark results (CSV, TXT)
+- User feedback logs (XLSX)
+</Accordion>
+
+## Configuration
+
+<Accordion title="Can I adjust the detection thresholds?">
+Yes! PAS2 has adjustable parameters:
+- **Similarity threshold**: Controls semantic similarity matching
+- **Match percentage threshold**: Controls the percentage of responses that must match
+- **Number of paraphrases**: Controls how many variations are generated (default: 5)
+</Accordion>
+
+<Accordion title="Where is data stored?">
+PAS2 uses SQLite for data storage:
+- In Hugging Face Spaces: Uses the persistent `/data` directory
+- Local deployment: Database file stored in the application directory
+- Feedback data survives restarts and preserves statistics long-term
+</Accordion>
+
+## License and attribution
+
+<Accordion title="What license does PAS2 use?">
+PAS2 is licensed under the MIT License with an attribution requirement. You are free to use, modify, and distribute the software, but must provide appropriate attribution to the original author.
+</Accordion>
+
+<Accordion title="How do I cite PAS2 in my research?">
+If you use PAS2 in your research or project, please cite it as:
+
+```bibtex
+@software{pas2_2024,
+  author = {Serhan Yilmaz},
+  title = {PAS2 - Paraphrase-based AI System for Semantic Similarity},
+  year = {2024},
+  publisher = {GitHub},
+  url = {https://github.com/serhanylmz/pas2}
+}
+```
+
+You must also:
+1. Include the copyright notice and license in any copy or substantial portion of the software
+2. Cite the project in any publications, presentations, or documentation
+3. Maintain a link to the original repository in any forks or derivative works
+</Accordion>
+
+## Support
+
+<Accordion title="How do I get help or report issues?">
+For questions, issues, or collaboration:
+
+- **GitHub**: https://github.com/serhanylmz/pas2
+- **Email**: serhan.yilmaz@sabanciuniv.edu
+- **Institution**: Sabanci University
+</Accordion>
+
+<Accordion title="Can I contribute to PAS2?">
+Yes! Contributions are welcome. Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+See the [Contributing](/contributing) page for detailed guidelines.
+</Accordion>

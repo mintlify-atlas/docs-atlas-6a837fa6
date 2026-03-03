@@ -1,0 +1,119 @@
+---
+title: Welcome to PAS2
+description: A sophisticated hallucination detection system using paraphrase-based approach with model-as-judge verification
+---
+
+# Detect hallucinations in AI responses with confidence
+
+PAS2 (Paraphrase-based Approach for Scrutinizing Systems) is a powerful hallucination detection system that uses semantic paraphrasing and multi-model verification to identify factual inconsistencies in LLM responses.
+
+## How it works
+
+PAS2 sends semantically equivalent variations of your query to an LLM, then uses a judge model to analyze the responses for factual inconsistencies. When an AI hallucinates, it often gives different answers to the same question asked in different ways.
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Get up and running with PAS2 in under 5 minutes
+  </Card>
+  <Card title="How it works" icon="brain" href="/how-it-works">
+    Understand the paraphrase-based detection system
+  </Card>
+  <Card title="API reference" icon="code" href="/api/pas2-class">
+    Explore the complete API documentation
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/guides/configuration">
+    Customize detection parameters and models
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Multi-model architecture
+
+PAS2 uses **Mistral Large** to generate responses and **OpenAI's o3-mini** as an independent judge to detect hallucinations. This separation ensures unbiased analysis.
+
+### Paraphrase generation
+
+Automatically generates semantically equivalent variations of queries using Mistral's JSON mode. Each paraphrase preserves the original meaning while varying structure and wording.
+
+### Real-time progress tracking
+
+Visual feedback during analysis with detailed progress updates for paraphrase generation, response collection, and judgment phases.
+
+### Detailed analysis output
+
+```python
+{
+  "hallucination_detected": True,
+  "confidence_score": 0.87,
+  "conflicting_facts": [
+    {
+      "fact": "Moon landing date",
+      "variation_1": "July 20, 1969",
+      "variation_2": "July 21, 1969"
+    }
+  ],
+  "reasoning": "Responses show inconsistent dates for the moon landing...",
+  "summary": "Factual inconsistency detected in temporal information"
+}
+```
+
+### Persistent feedback storage
+
+Built-in SQLite database stores detection results and user feedback with support for Hugging Face Spaces persistent storage.
+
+## Use cases
+
+<CardGroup cols={3}>
+  <Card title="QA systems" icon="comments">
+    Validate factual accuracy in customer support bots
+  </Card>
+  <Card title="Content generation" icon="file-lines">
+    Verify consistency in AI-generated articles
+  </Card>
+  <Card title="Research tools" icon="microscope">
+    Ensure reliability in AI research assistants
+  </Card>
+  <Card title="Educational apps" icon="graduation-cap">
+    Detect misinformation in tutoring systems
+  </Card>
+  <Card title="Data extraction" icon="database">
+    Validate AI-extracted facts from documents
+  </Card>
+  <Card title="Fact-checking" icon="check-double">
+    Cross-verify AI claims automatically
+  </Card>
+</CardGroup>
+
+## Get started
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pip install mistralai openai gradio pydantic
+    ```
+  </Step>
+  <Step title="Set API keys">
+    ```bash
+    export MISTRAL_API_KEY="your_mistral_key"
+    export OPENAI_API_KEY="your_openai_key"
+    ```
+  </Step>
+  <Step title="Run your first detection">
+    ```python
+    from pas2 import PAS2
+    
+    detector = PAS2()
+    results = detector.detect_hallucination("Who was the first person on the moon?")
+    print(results["hallucination_detected"])  # True or False
+    ```
+  </Step>
+</Steps>
+
+<Note>
+PAS2 requires API keys for both Mistral AI and OpenAI. The system uses parallel API calls for efficient processing.
+</Note>
+
+## Next steps
+
+Ready to dive deeper? Check out the [Quick start guide](/quickstart) to run your first hallucination detection, or explore [How it works](/how-it-works) to understand the technical details.

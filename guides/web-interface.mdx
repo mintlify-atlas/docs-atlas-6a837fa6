@@ -1,0 +1,224 @@
+---
+title: Using the web interface
+description: Learn how to use the Gradio web interface for interactive hallucination detection
+---
+
+The PAS2 Gradio web interface provides an easy-to-use platform for detecting hallucinations in AI responses without writing code.
+
+## Starting the interface
+
+<Steps>
+  <Step title="Launch the application">
+    Run the application using the `app.py` entry point:
+    
+    ```bash
+    python app.py
+    ```
+    
+    The interface will launch and be accessible in your web browser.
+  </Step>
+  
+  <Step title="Set API keys">
+    The application requires API keys for Mistral and OpenAI. These can be set in two ways:
+    
+    <Tabs>
+      <Tab title="Environment variables">
+        Set the following environment variables before launching:
+        
+        ```bash
+        export HF_MISTRAL_API_KEY="your-mistral-api-key"
+        export HF_OPENAI_API_KEY="your-openai-api-key"
+        ```
+        
+        The application automatically initializes with these keys on startup.
+      </Tab>
+      
+      <Tab title="Hugging Face Spaces">
+        When deploying to Hugging Face Spaces, add your API keys in the Secrets tab:
+        
+        - `HF_MISTRAL_API_KEY`: Your Mistral API key
+        - `HF_OPENAI_API_KEY`: Your OpenAI API key
+        
+        The app prioritizes Hugging Face environment variables:
+        
+        ```python
+        self.mistral_api_key = mistral_api_key or os.environ.get("HF_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
+        self.openai_api_key = openai_api_key or os.environ.get("HF_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step title="Submit a query">
+    Enter your query in the text box and click the submit button. The interface will:
+    
+    1. Generate paraphrases of your query
+    2. Get responses from the AI for each paraphrase
+    3. Analyze responses for inconsistencies
+    4. Display comprehensive results
+  </Step>
+</Steps>
+
+## Interface features
+
+### Example queries
+
+The interface provides pre-configured example queries you can test:
+
+```python
+example_queries = [
+    "Who was the first person to land on the moon?",
+    "What is the capital of France?",
+    "How many planets are in our solar system?",
+    "Who wrote the novel 1984?",
+    "What is the speed of light?",
+    "What was the first computer?"
+]
+```
+
+Click any example to populate the query field.
+
+### Real-time progress tracking
+
+The interface shows detailed progress through multiple stages:
+
+<Steps>
+  <Step title="Starting process">
+    Initial setup (5% complete)
+  </Step>
+  
+  <Step title="Generating paraphrases">
+    Creating semantic variations of your query (15-30% complete)
+  </Step>
+  
+  <Step title="Getting responses">
+    Fetching AI responses for each paraphrase with incremental progress (35-65% complete)
+    
+    The interface shows: `Getting responses (2/4)...`
+  </Step>
+  
+  <Step title="Analyzing responses">
+    Using the judge model to detect inconsistencies (70-100% complete)
+  </Step>
+</Steps>
+
+Progress updates are implemented using a dedicated tracker:
+
+```python
+class ProgressTracker:
+    STAGES = {
+        "idle": {"status": "Ready", "progress": 0, "color": "#757575"},
+        "starting": {"status": "Starting process...", "progress": 5, "color": "#2196F3"},
+        "generating_paraphrases": {"status": "Generating paraphrases...", "progress": 15, "color": "#2196F3"},
+        "responses_progress": {"status": "Getting responses ({completed}/{total})...", "progress": 40, "color": "#2196F3"},
+        "judging": {"status": "Analyzing responses for hallucinations...", "progress": 70, "color": "#2196F3"},
+        "complete": {"status": "Analysis complete!", "progress": 100, "color": "#4CAF50"}
+    }
+```
+
+### Results display
+
+After processing, the interface shows comprehensive results:
+
+**Statistics panel**
+- Hallucination detected: Yes/No
+- Confidence score: 0.00-1.00
+- Number of paraphrases analyzed
+- Total processing time
+
+**Analysis summary**
+
+A color-coded summary box:
+- Red background with left border: Hallucination detected
+- Green background with left border: No hallucination detected
+
+**Detailed breakdown**
+
+1. Original query and response
+2. All paraphrased queries and their responses
+3. Detailed reasoning from the judge model
+4. List of conflicting facts (if any)
+
+### Feedback system
+
+Provide feedback on detection results to help improve the system:
+
+```python
+def save_feedback(self, results, feedback):
+    """Save results and user feedback to SQLite database"""
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO feedback (
+            timestamp, original_query, original_response,
+            paraphrased_queries, paraphrased_responses,
+            hallucination_detected, confidence_score,
+            conflicting_facts, reasoning, summary, user_feedback
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data)
+```
+
+Feedback is stored in a persistent SQLite database at `/data/feedback.db`.
+
+### Feedback statistics
+
+View aggregate statistics from all submitted feedback:
+
+- Total feedback submissions
+- Number of hallucinations detected
+- Number of clean responses
+- Average confidence score
+
+```python
+def get_feedback_stats(self):
+    cursor.execute("""
+        SELECT hallucination_detected, COUNT(*) 
+        FROM feedback 
+        GROUP BY hallucination_detected
+    """)
+    detection_stats = dict(cursor.fetchall())
+    
+    cursor.execute("SELECT AVG(confidence_score) FROM feedback")
+    avg_confidence = cursor.fetchone()[0] or 0
+```
+
+## Customization
+
+The interface is built with Gradio and includes extensive custom CSS for styling. You can modify the appearance by editing the `css` variable in `pas2.py:720-880`.
+
+## Database persistence
+
+The application uses SQLite for persistent storage:
+
+- **Primary location**: `/data/feedback.db` (for Hugging Face Spaces persistent storage)
+- **Fallback location**: `temp_data/feedback.db` (local development)
+
+```python
+self.data_dir = "/data"
+self.db_path = os.path.join(self.data_dir, "feedback.db")
+
+# Fallback if /data is not accessible
+temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_data")
+os.makedirs(temp_dir, exist_ok=True)
+self.db_path = os.path.join(temp_dir, "feedback.db")
+```
+
+## Logging
+
+The interface provides detailed logging for troubleshooting:
+
+```python
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+```
+
+Logs include:
+- API initialization status
+- Paraphrase generation progress
+- Response retrieval timing
+- Judgment model execution
+- Error messages and stack traces

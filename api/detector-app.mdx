@@ -1,0 +1,212 @@
+---
+title: HallucinationDetectorApp class
+description: Gradio application wrapper for PAS2 with database storage and UI integration
+---
+
+## Overview
+
+The `HallucinationDetectorApp` class provides a complete application wrapper around the PAS2 detector, including database storage for feedback, progress tracking, and Gradio UI integration.
+
+## Constructor
+
+```python
+HallucinationDetectorApp()
+```
+
+Initialize the hallucination detector application. No parameters required.
+
+## Class attributes
+
+<ResponseField name="pas2" type="PAS2 | None">
+  The initialized PAS2 detector instance. Initially `None` until `initialize_api` is called.
+</ResponseField>
+
+<ResponseField name="data_dir" type="str">
+  Directory path for persistent data storage (default: `"/data"`).
+</ResponseField>
+
+<ResponseField name="db_path" type="str">
+  Full path to the SQLite database file for storing feedback.
+</ResponseField>
+
+<ResponseField name="progress_callback" type="callable | None">
+  Registered callback function for progress updates.
+</ResponseField>
+
+## Methods
+
+### initialize_api
+
+```python
+initialize_api(mistral_api_key: str, openai_api_key: str) -> str
+```
+
+Initialize the PAS2 detector with API credentials.
+
+<ParamField path="mistral_api_key" type="str" required>
+  Mistral API key for accessing the Mistral API.
+</ParamField>
+
+<ParamField path="openai_api_key" type="str" required>
+  OpenAI API key for accessing the OpenAI API.
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Status message indicating success or failure of initialization.
+</ResponseField>
+
+### process_query
+
+```python
+process_query(query: str) -> Dict
+```
+
+Process a query using the PAS2 detector.
+
+<ParamField path="query" type="str" required>
+  The user query to analyze for hallucinations.
+</ParamField>
+
+<ResponseField name="return" type="Dict">
+  Dictionary containing detection results with keys:
+  - `original_query`: The input query
+  - `original_response`: Response to the original query
+  - `paraphrased_queries`: List of paraphrased queries
+  - `paraphrased_responses`: List of responses to paraphrased queries
+  - `hallucination_detected`: Boolean indicating detection result
+  - `confidence_score`: Float between 0-1
+  - `conflicting_facts`: List of detected conflicts
+  - `reasoning`: Detailed reasoning
+  - `summary`: Summary of analysis
+  - `error`: Error message if processing failed
+</ResponseField>
+
+<Warning>
+  Returns a dictionary with an `error` key if the PAS2 instance is not initialized or if the query is empty.
+</Warning>
+
+### save_feedback
+
+```python
+save_feedback(results: Dict, feedback: str) -> str
+```
+
+Save detection results and user feedback to the SQLite database.
+
+<ParamField path="results" type="Dict" required>
+  The results dictionary returned from `process_query`.
+</ParamField>
+
+<ParamField path="feedback" type="str" required>
+  User feedback text to store with the results.
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Status message indicating success or failure of the save operation.
+</ResponseField>
+
+### get_feedback_stats
+
+```python
+get_feedback_stats() -> Dict | None
+```
+
+Retrieve statistics about collected feedback from the database.
+
+<ResponseField name="return" type="Dict | None">
+  Dictionary containing statistics with keys:
+  - `total_feedback`: Total number of feedback entries
+  - `hallucinations_detected`: Count of detections with hallucinations
+  - `no_hallucinations`: Count of detections without hallucinations
+  - `average_confidence`: Average confidence score across all entries
+  
+  Returns `None` if an error occurs.
+</ResponseField>
+
+### set_progress_callback
+
+```python
+set_progress_callback(callback: callable) -> None
+```
+
+Register a callback function to receive progress updates.
+
+<ParamField path="callback" type="callable" required>
+  Function to call with progress updates. Should accept `(stage: str, **kwargs)`.
+</ParamField>
+
+## Database schema
+
+The app automatically creates a SQLite database with the following schema:
+
+```sql
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    original_query TEXT,
+    original_response TEXT,
+    paraphrased_queries TEXT,
+    paraphrased_responses TEXT,
+    hallucination_detected INTEGER,
+    confidence_score REAL,
+    conflicting_facts TEXT,
+    reasoning TEXT,
+    summary TEXT,
+    user_feedback TEXT
+)
+```
+
+## Example usage
+
+```python
+from pas2 import HallucinationDetectorApp
+
+# Initialize the app
+app = HallucinationDetectorApp()
+
+# Set up API keys
+status = app.initialize_api(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
+)
+print(status)  # "API keys set successfully! You can now use the application."
+
+# Process a query
+results = app.process_query("What is the capital of France?")
+
+if "error" not in results:
+    print(f"Hallucination: {results['hallucination_detected']}")
+    print(f"Confidence: {results['confidence_score']}")
+    
+    # Save feedback
+    feedback_status = app.save_feedback(results, "Accurate result")
+    print(feedback_status)
+    
+    # Get stats
+    stats = app.get_feedback_stats()
+    print(f"Total feedback entries: {stats['total_feedback']}")
+```
+
+## Example with progress callback
+
+```python
+def progress_handler(stage, **kwargs):
+    if stage == "generating_paraphrases":
+        print("Generating paraphrases...")
+    elif stage == "responses_progress":
+        completed = kwargs.get('completed_responses', 0)
+        total = kwargs.get('total_responses', 0)
+        print(f"Fetching responses: {completed}/{total}")
+    elif stage == "complete":
+        print("Analysis complete!")
+
+app = HallucinationDetectorApp()
+app.set_progress_callback(progress_handler)
+app.initialize_api(mistral_api_key="key", openai_api_key="key")
+
+results = app.process_query("Who wrote 1984?")
+```
+
+<Note>
+  The database is created in the `/data` directory by default for persistent storage in Hugging Face Spaces. If this directory is not accessible, the app falls back to a temporary directory.
+</Note>

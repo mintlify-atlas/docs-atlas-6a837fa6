@@ -1,0 +1,280 @@
+---
+title: Model-as-judge approach
+description: Learn how PAS2 uses OpenAI's o3-mini model as an independent judge to evaluate response consistency and detect hallucinations
+---
+
+## Overview
+
+The model-as-judge approach uses a separate, independent language model to evaluate and compare responses from the system under test. This provides an automated, scalable way to detect factual inconsistencies without requiring human annotators.
+
+## Why use a judge model?
+
+The judge model provides several advantages:
+
+<Accordion title="Advantages of model-as-judge">
+  - **Scalability**: Can process thousands of queries without human intervention
+  - **Consistency**: Applies the same evaluation criteria to all responses
+  - **Detail**: Provides structured reasoning and identifies specific conflicting facts
+  - **Speed**: Analyzes multiple responses in seconds
+  - **Cost-effectiveness**: More affordable than human evaluation at scale
+</Accordion>
+
+<Note>
+PAS2 uses OpenAI's o3-mini model as the judge because of its strong reasoning capabilities and reliability in structured output generation.
+</Note>
+
+## Judge method implementation
+
+The `judge_hallucination()` method orchestrates the judgment process:
+
+```python
+def judge_hallucination(self, 
+                       original_query: str, 
+                       original_response: str, 
+                       paraphrased_queries: List[str], 
+                       paraphrased_responses: List[str]) -> HallucinationJudgment:
+    """
+    Use OpenAI's o3-mini as a judge to detect hallucinations in the responses
+    """
+```
+
+### Method signature
+
+**Parameters:**
+- `original_query` (str): The first query that was asked
+- `original_response` (str): Response to the original query
+- `paraphrased_queries` (List[str]): All semantic paraphrases of the original
+- `paraphrased_responses` (List[str]): Responses to each paraphrase
+
+**Returns:**
+- `HallucinationJudgment`: Structured judgment with detection results and reasoning
+
+## Context preparation
+
+The judge receives a formatted context containing all queries and responses (pas2.py:314-324):
+
+```python
+context = f"""
+Original Question: {original_query}
+
+Original Response: 
+{original_response}
+
+Paraphrased Questions and their Responses:
+"""
+
+for i, (query, response) in enumerate(zip(paraphrased_queries, paraphrased_responses), 1):
+    context += f"\nParaphrased Question {i}: {query}\n\nResponse {i}:\n{response}\n"
+```
+
+This structure allows the judge to:
+- Compare the original response against all paraphrased responses
+- Identify patterns of inconsistency across multiple variations
+- Trace conflicting facts back to specific query-response pairs
+
+## System prompt engineering
+
+The judge uses a carefully designed system prompt to ensure accurate evaluation (pas2.py:326-338):
+
+```python
+system_prompt = """
+You are a judge evaluating whether an AI is hallucinating across different responses to semantically equivalent questions.
+Analyze all responses carefully to identify any factual inconsistencies or contradictions.
+Focus on factual discrepancies, not stylistic differences.
+A hallucination is when the AI states different facts in response to questions that are asking for the same information.
+
+Your response should be a JSON with the following fields:
+- hallucination_detected: boolean indicating whether hallucinations were found
+- confidence_score: number between 0 and 1 representing your confidence in the judgment
+- conflicting_facts: an array of objects describing any conflicting information found
+- reasoning: detailed explanation for your judgment
+- summary: a concise summary of your analysis
+"""
+```
+
+### Key prompt elements
+
+<Steps>
+  <Step title="Role definition">
+    Establishes the judge's purpose: detecting hallucinations through cross-response comparison.
+  </Step>
+  
+  <Step title="Evaluation criteria">
+    Focuses on factual inconsistencies while ignoring stylistic variations that don't affect meaning.
+  </Step>
+  
+  <Step title="Hallucination definition">
+    Clearly defines what constitutes a hallucination: stating different facts for the same question.
+  </Step>
+  
+  <Step title="Output structure">
+    Specifies the exact JSON schema for structured, parseable results.
+  </Step>
+</Steps>
+
+<Info>
+The prompt explicitly instructs the judge to focus on factual discrepancies, not stylistic differences. This prevents false positives from variations in tone, length, or phrasing.
+</Info>
+
+## API call and response parsing
+
+The judge model is called with structured output mode:
+
+```python
+response = self.openai_client.chat.completions.create(
+    model=self.openai_model,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Evaluate these responses for hallucinations:\n\n{context}"}
+    ],
+    response_format={"type": "json_object"}
+)
+```
+
+### Response format enforcement
+
+<Note>
+Using `response_format={"type": "json_object"}` ensures the model always returns valid JSON, making parsing reliable and reducing error handling complexity.
+</Note>
+
+## Judgment object creation
+
+The JSON response is parsed and converted to a typed Pydantic model (pas2.py:354-361):
+
+```python
+judgment = HallucinationJudgment(
+    hallucination_detected=result_json.get("hallucination_detected", False),
+    confidence_score=result_json.get("confidence_score", 0.0),
+    conflicting_facts=result_json.get("conflicting_facts", []),
+    reasoning=result_json.get("reasoning", "No reasoning provided."),
+    summary=result_json.get("summary", "No summary provided.")
+)
+```
+
+This provides:
+- Type safety through Pydantic validation
+- Default values for missing fields
+- Consistent structure across all judgments
+
+## Judgment components explained
+
+### Hallucination detection flag
+
+**Type**: `bool`  
+**Description**: Primary binary indicator of whether hallucinations were found
+
+```python
+hallucination_detected: bool = Field(
+    description="Whether a hallucination is detected across the responses"
+)
+```
+
+### Confidence score
+
+**Type**: `float` (0.0 to 1.0)  
+**Description**: Judge's confidence in its determination
+
+- **0.0-0.3**: Low confidence, borderline cases
+- **0.4-0.6**: Moderate confidence, some evidence
+- **0.7-1.0**: High confidence, clear evidence
+
+```python
+confidence_score: float = Field(
+    description="Confidence score between 0-1 for the hallucination judgment"
+)
+```
+
+### Conflicting facts
+
+**Type**: `List[Dict[str, Any]]`  
+**Description**: Structured list of specific factual contradictions found
+
+Example structure:
+```json
+[
+  {
+    "fact_type": "date",
+    "original": "1969",
+    "paraphrase_1": "1968",
+    "description": "Moon landing year differs between responses"
+  }
+]
+```
+
+### Reasoning
+
+**Type**: `str`  
+**Description**: Detailed explanation of the judge's analysis process and findings
+
+Typically includes:
+- Comparison methodology
+- Specific examples of inconsistencies
+- Explanation of why differences are or aren't hallucinations
+
+### Summary
+
+**Type**: `str`  
+**Description**: Concise summary suitable for display to end users
+
+<Accordion title="Example judgment">
+```json
+{
+  "hallucination_detected": true,
+  "confidence_score": 0.85,
+  "conflicting_facts": [
+    {
+      "type": "numerical",
+      "description": "Number of planets varies between responses"
+    }
+  ],
+  "reasoning": "The original response states there are 8 planets, while paraphrase 2's response states there are 9 planets. This is a clear factual inconsistency.",
+  "summary": "Conflicting information detected about the number of planets in the solar system."
+}
+```
+</Accordion>
+
+## Fallback mechanism
+
+If the judge model fails or returns an error, a safe fallback judgment is provided (pas2.py:368-377):
+
+```python
+except Exception as e:
+    logger.error("Error in hallucination judgment: %s", str(e), exc_info=True)
+    return HallucinationJudgment(
+        hallucination_detected=False,
+        confidence_score=0.0,
+        conflicting_facts=[],
+        reasoning="Failed to obtain judgment from the model.",
+        summary="Analysis failed due to API error."
+    )
+```
+
+<Info>
+The fallback assumes no hallucination (`hallucination_detected=False`) with zero confidence, following the principle of "innocent until proven guilty" when evidence is unavailable.
+</Info>
+
+## Judge model selection
+
+PAS2 uses OpenAI's o3-mini model (pas2.py:58):
+
+```python
+self.openai_model = "o3-mini"
+```
+
+### Why o3-mini?
+
+- **Reasoning capability**: Strong analytical and comparison abilities
+- **Structured output**: Reliable JSON generation
+- **Cost-efficiency**: More affordable than larger models
+- **Speed**: Fast response times for real-time applications
+
+## Performance characteristics
+
+Judgment typically completes in 2-5 seconds, depending on:
+- Number of responses to compare (more responses = longer analysis)
+- Response length (longer text requires more processing)
+- API response time (network and model availability)
+
+<Note>
+All judgment timing is logged with millisecond precision for performance monitoring (pas2.py:364).
+</Note>

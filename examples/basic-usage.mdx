@@ -1,0 +1,153 @@
+---
+title: Basic usage
+description: Get started with PAS2 for hallucination detection using simple examples
+---
+
+This guide shows you how to use PAS2 for basic hallucination detection tasks.
+
+## Simple hallucination detection
+
+The most common use case is detecting hallucinations by comparing responses to paraphrased queries:
+
+```python
+import os
+from pas2 import PAS2
+
+# Initialize PAS2 with API keys
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Detect hallucinations for a query
+query = "Who was the first person to land on the moon?"
+results = pas2.detect_hallucination(query, n_paraphrases=3)
+
+# Check the results
+if results["hallucination_detected"]:
+    print(f"Hallucination detected with {results['confidence_score']:.2f} confidence")
+    print(f"Reasoning: {results['reasoning']}")
+else:
+    print("No hallucination detected")
+```
+
+**Expected output:**
+
+```
+No hallucination detected
+```
+
+## Using environment variables
+
+PAS2 automatically loads API keys from environment variables:
+
+<CodeGroup>
+
+```python Python
+import os
+from pas2 import PAS2
+
+# API keys are loaded from HF_MISTRAL_API_KEY and HF_OPENAI_API_KEY
+# or MISTRAL_API_KEY and OPENAI_API_KEY
+pas2 = PAS2()
+
+results = pas2.detect_hallucination(
+    "What is the capital of France?",
+    n_paraphrases=3
+)
+```
+
+```bash Shell
+# Set environment variables before running
+export MISTRAL_API_KEY="your-mistral-key"
+export OPENAI_API_KEY="your-openai-key"
+python your_script.py
+```
+
+</CodeGroup>
+
+**Expected output:**
+
+```python
+{
+    "original_query": "What is the capital of France?",
+    "original_response": "The capital of France is Paris.",
+    "hallucination_detected": False,
+    "confidence_score": 0.95,
+    "summary": "All responses consistently identify Paris as the capital of France."
+}
+```
+
+## Generating paraphrases
+
+Generate paraphrased versions of a query to test consistency:
+
+```python
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+query = "How many planets are in our solar system?"
+all_queries = pas2.generate_paraphrases(query, n_paraphrases=3)
+
+print("Original query:")
+print(all_queries[0])
+print("\nParaphrased queries:")
+for i, paraphrase in enumerate(all_queries[1:], 1):
+    print(f"{i}. {paraphrase}")
+```
+
+**Expected output:**
+
+```
+Original query:
+How many planets are in our solar system?
+
+Paraphrased queries:
+1. What is the total number of planets in our solar system?
+2. Can you tell me how many planets exist in the solar system?
+3. How many planets does our solar system contain?
+```
+
+## Getting responses to queries
+
+Retrieve responses from the LLM for multiple queries:
+
+```python
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+queries = [
+    "What is the speed of light?",
+    "Can you tell me the speed at which light travels?",
+    "How fast does light move?"
+]
+
+responses = pas2.get_responses(queries)
+
+for query, response in zip(queries, responses):
+    print(f"Q: {query}")
+    print(f"A: {response[:100]}...\n")
+```
+
+**Expected output:**
+
+```
+Q: What is the speed of light?
+A: The speed of light in a vacuum is approximately 299,792,458 meters per second (m/s), or about...
+
+Q: Can you tell me the speed at which light travels?
+A: Light travels at approximately 299,792,458 meters per second in a vacuum, which is often rou...
+
+Q: How fast does light move?
+A: Light moves at a constant speed of about 299,792 kilometers per second (or approximately 186,...
+```

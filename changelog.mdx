@@ -1,0 +1,68 @@
+---
+title: Changelog
+description: Version history and updates for the PAS2 hallucination detection system
+---
+
+## Overview
+
+This page tracks the major updates, features, and improvements to PAS2.
+
+## Version history
+
+### Current version (2024)
+
+#### Features
+
+- **Paraphrase generation**: Automatically generates semantically equivalent variations of user queries
+- **Multi-model architecture**: Uses Mistral Large for responses and OpenAI's o3-mini as a judge
+- **Real-time progress tracking**: Visual feedback during the analysis process
+- **Persistent feedback storage**: User feedback and results stored in SQLite database
+- **Interactive web interface**: Clean, responsive Gradio interface with example queries
+- **Detailed analysis**: Provides confidence scores, reasoning, and specific conflicting facts
+- **Statistics dashboard**: Real-time tracking of hallucination detection statistics
+
+#### Core capabilities
+
+- Generates paraphrased versions of input queries
+- Evaluates responses using semantic similarity analysis
+- Provides match percentage and similarity metrics
+- Includes visualization tools for similarity matrices
+- Web interface for interactive testing
+- Benchmarking capabilities for bulk evaluation
+
+#### Technical specifications
+
+- Default model: gpt-4-2024-08-06
+- Default embedding model: text-embedding-3-small
+- Adjustable similarity and match percentage thresholds
+- SQLite database for persistent storage
+
+#### Output formats
+
+- Similarity matrix plots (PNG)
+- Match matrix plots (PNG)
+- Benchmark results (CSV, TXT)
+- User feedback logs (XLSX)
+
+### Deployment improvements
+
+#### Hugging Face Spaces integration
+
+- Persistent storage using `/data` directory
+- Feedback data survives Space restarts
+- Statistics preserved long-term
+- No data loss during inactivity periods
+- Environment-based API key configuration
+
+## Upcoming features
+
+Check the GitHub repository for planned features and ongoing development:
+https://github.com/serhanylmz/pas2
+
+## Contributing to changelog
+
+When contributing new features, please update this changelog with:
+- Clear description of the change
+- Version number or date
+- Impact on existing functionality
+- Any breaking changes

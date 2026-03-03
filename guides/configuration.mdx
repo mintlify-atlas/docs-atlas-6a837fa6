@@ -1,0 +1,141 @@
+---
+title: Configuration
+description: Configure PAS2 settings and environment variables for optimal performance
+---
+
+PAS2 uses environment variables to manage API keys and configuration settings. This guide covers all available configuration options.
+
+## Environment variables
+
+PAS2 supports environment variables for API authentication and configuration. Create a `.env` file in your project root:
+
+```bash .env
+HF_MISTRAL_API_KEY=your_mistral_api_key_here
+HF_OPENAI_API_KEY=your_openai_api_key_here
+```
+
+<Note>
+The `HF_` prefix is prioritized for Hugging Face Spaces deployment. The system also supports `MISTRAL_API_KEY` and `OPENAI_API_KEY` as fallback options.
+</Note>
+
+## Configuration priority
+
+PAS2 checks for API keys in the following order:
+
+<Steps>
+  <Step title="Direct parameter">
+    API keys passed directly to the `PAS2` class constructor:
+    ```python
+    pas2 = PAS2(mistral_api_key="key", openai_api_key="key")
+    ```
+  </Step>
+  
+  <Step title="Hugging Face environment variables">
+    Environment variables with `HF_` prefix:
+    - `HF_MISTRAL_API_KEY`
+    - `HF_OPENAI_API_KEY`
+  </Step>
+  
+  <Step title="Standard environment variables">
+    Standard environment variable names:
+    - `MISTRAL_API_KEY`
+    - `OPENAI_API_KEY`
+  </Step>
+</Steps>
+
+## Model configuration
+
+PAS2 uses specific models for different tasks:
+
+### Default models
+
+- **Mistral model**: `mistral-large-latest` - Used for paraphrase generation and response generation
+- **OpenAI model**: `o3-mini` - Used as the judge model for hallucination detection
+
+<Warning>
+Changing the default models may affect hallucination detection accuracy. The system is optimized for the models listed above.
+</Warning>
+
+## Paraphrase settings
+
+Configure the number of paraphrases generated for each query:
+
+```python
+# Default: 3 paraphrases
+results = pas2.detect_hallucination(query, n_paraphrases=3)
+
+# Increase for more thorough analysis (slower)
+results = pas2.detect_hallucination(query, n_paraphrases=5)
+
+# Reduce for faster processing (less comprehensive)
+results = pas2.detect_hallucination(query, n_paraphrases=2)
+```
+
+<Note>
+More paraphrases increase accuracy but also increase API costs and processing time.
+</Note>
+
+## Database configuration
+
+PAS2 uses SQLite for persistent feedback storage:
+
+- **Default path**: `/data/feedback.db` (Hugging Face Spaces)
+- **Fallback path**: `./temp_data/feedback.db` (local development)
+
+The database is automatically initialized on first run and stores:
+
+- Original queries and responses
+- Paraphrased queries and responses
+- Hallucination detection results
+- User feedback
+- Confidence scores and reasoning
+
+## Logging configuration
+
+PAS2 includes built-in logging for debugging and monitoring:
+
+```python
+import logging
+
+# Default level: INFO
+logging.basicConfig(level=logging.INFO)
+
+# For more detailed logs:
+logging.basicConfig(level=logging.DEBUG)
+
+# For production (errors only):
+logging.basicConfig(level=logging.ERROR)
+```
+
+## Performance tuning
+
+### Parallel processing
+
+PAS2 uses `ThreadPoolExecutor` for parallel API calls with a default maximum of 5 workers:
+
+```python
+max_workers = min(len(queries), 5)
+```
+
+This balances speed with API rate limits.
+
+### Progress tracking
+
+Enable progress callbacks for real-time updates:
+
+```python
+def progress_callback(stage, **kwargs):
+    print(f"Stage: {stage}, Details: {kwargs}")
+
+pas2 = PAS2(
+    mistral_api_key="key",
+    openai_api_key="key",
+    progress_callback=progress_callback
+)
+```
+
+## Next steps
+
+- [API keys](/guides/api-keys) - Get your Mistral and OpenAI API keys
+- [Web interface](/guides/web-interface) - Learn how to use the web interface
+- [Python library](/guides/python-library) - Use PAS2 as a Python library

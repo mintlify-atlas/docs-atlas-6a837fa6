@@ -1,0 +1,364 @@
+---
+title: Benchmarking and evaluation
+description: Evaluate PAS2's hallucination detection accuracy using benchmark datasets
+---
+
+The PAS2 library includes a benchmarking tool for evaluating detection accuracy against labeled datasets. This helps you measure performance and tune parameters for your use case.
+
+## Overview
+
+The benchmarking script (`legacy/pas2-benchmark.py`) evaluates PAS2 against JSON datasets containing queries with known hallucination labels.
+
+## Dataset format
+
+Your benchmark dataset should be in JSON Lines format (`.jsonl`), with each line containing:
+
+```json
+{"ID": "sample_1", "user_query": "Who was the first person to land on the moon?", "hallucination": "no"}
+{"ID": "sample_2", "user_query": "What is the capital of France?", "hallucination": "no"}
+{"ID": "sample_3", "user_query": "How many planets are in our solar system?", "hallucination": "no"}
+```
+
+**Required fields:**
+- `ID`: Unique identifier for the sample
+- `user_query`: The question or prompt to test
+- `hallucination`: Ground truth label (`"yes"` or `"no"`)
+
+## Running the benchmark
+
+Execute the benchmark script from the command line:
+
+<CodeGroup>
+```bash All samples
+python legacy/pas2-benchmark.py --json_file general_data.json
+```
+
+```bash Limited samples
+python legacy/pas2-benchmark.py --json_file general_data.json --num_samples 10
+```
+</CodeGroup>
+
+**Command-line arguments:**
+- `--json_file`: Path to your JSON dataset (default: `general_data.json`)
+- `--num_samples`: Number of samples to process (optional, processes all if not specified)
+
+## Implementation details
+
+The benchmark script processes each sample through the PAS2 detection pipeline:
+
+```python
+def run_hallucination_evaluator(json_file: str, num_samples: int = None):
+    pas2 = PAS2()  # Initialize the PAS2 library
+    
+    # Load data from JSON file
+    data = []
+    with open(json_file, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if line:
+                try:
+                    sample = json.loads(line)
+                    data.append(sample)
+                    if num_samples and len(data) >= num_samples:
+                        break
+                except json.JSONDecodeError as e:
+                    logger.error(f"Error decoding JSON on line {line_num}: {e}")
+```
+
+### Processing samples
+
+Each sample is evaluated using the PAS2 detection method:
+
+```python
+for idx, sample in enumerate(data):
+    sample_id = sample.get('ID')
+    user_query = sample.get('user_query')
+    true_label = sample.get('hallucination')  # 'yes' or 'no'
+    
+    # Use the PAS2 library to detect hallucination
+    hallucinated, initial_response, all_questions, all_responses = pas2.detect_hallucination(
+        user_query, 
+        n_paraphrases=5, 
+        similarity_threshold=0.9, 
+        match_percentage_threshold=0.7
+    )
+    
+    # Convert 'yes'/'no' to boolean for comparison
+    true_hallucinated = true_label.strip().lower() == 'yes'
+    
+    # Compare the detected hallucination with the true label
+    if hallucinated == true_hallucinated:
+        correct_detections += 1
+```
+
+<Note>
+The legacy benchmark uses older parameter names (`similarity_threshold`, `match_percentage_threshold`) that are not present in the current PAS2 implementation. When adapting this code, use the current API with `n_paraphrases` only.
+</Note>
+
+### Progress tracking
+
+The script provides progress updates during execution:
+
+```python
+# Optional: print progress every 10 samples
+if (idx + 1) % 10 == 0:
+    logger.info(f"Processed {idx + 1}/{total_samples} samples...")
+
+# To avoid hitting rate limits (if applicable)
+time.sleep(1)
+```
+
+## Output files
+
+The benchmark generates two output files:
+
+### Accuracy report
+
+`accuracy.txt` contains overall performance metrics:
+
+```python
+with open('accuracy.txt', 'w', encoding='utf-8') as f:
+    f.write(f"Processed Samples: {processed_samples}/{total_samples}\n")
+    f.write(f"Accuracy: {accuracy:.2f}%\n")
+```
+
+**Example output:**
+```
+Processed Samples: 100/100
+Accuracy: 87.50%
+```
+
+### Detailed results
+
+`detailed_results.csv` contains per-sample analysis:
+
+```python
+with open('detailed_results.csv', 'w', encoding='utf-8', newline='') as csvfile:
+    fieldnames = [
+        'ID', 
+        'user_query', 
+        'true_label', 
+        'detected_hallucination', 
+        'initial_response', 
+        'paraphrased_questions', 
+        'all_responses'
+    ]
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    
+    writer.writeheader()
+    for result in detailed_results:
+        writer.writerow({
+            'ID': result['ID'],
+            'user_query': result['user_query'],
+            'true_label': result['true_label'],
+            'detected_hallucination': result['detected_hallucination'],
+            'initial_response': result['initial_response'],
+            'paraphrased_questions': json.dumps(result['paraphrased_questions']),
+            'all_responses': json.dumps(result['all_responses'])
+        })
+```
+
+**CSV columns:**
+- `ID`: Sample identifier
+- `user_query`: Original question
+- `true_label`: Ground truth (`yes` or `no`)
+- `detected_hallucination`: PAS2's prediction (`yes` or `no`)
+- `initial_response`: Response to original query
+- `paraphrased_questions`: JSON array of paraphrases
+- `all_responses`: JSON array of all responses
+
+## Accuracy calculation
+
+Accuracy is computed as the percentage of correct detections:
+
+```python
+accuracy = (correct_detections / processed_samples * 100) if processed_samples > 0 else 0
+logger.info(f"Processed Samples: {processed_samples}/{total_samples}")
+logger.info(f"Accuracy: {accuracy:.2f}%")
+```
+
+## Creating a custom benchmark
+
+Adapt the benchmark script for your evaluation needs:
+
+<Steps>
+  <Step title="Prepare your dataset">
+    Create a JSON Lines file with your test cases:
+    
+    ```python
+    import json
+    
+    samples = [
+        {"ID": "test_1", "user_query": "Your query here", "hallucination": "no"},
+        {"ID": "test_2", "user_query": "Another query", "hallucination": "yes"},
+    ]
+    
+    with open('my_benchmark.json', 'w') as f:
+        for sample in samples:
+            f.write(json.dumps(sample) + '\n')
+    ```
+  </Step>
+  
+  <Step title="Create a benchmark script">
+    Use the current PAS2 API:
+    
+    ```python
+    from pas2 import PAS2
+    import json
+    import csv
+    
+    pas2 = PAS2(
+        mistral_api_key="your-key",
+        openai_api_key="your-key"
+    )
+    
+    # Load dataset
+    data = []
+    with open('my_benchmark.json', 'r') as f:
+        for line in f:
+            if line.strip():
+                data.append(json.loads(line))
+    
+    # Evaluate
+    results = []
+    correct = 0
+    
+    for sample in data:
+        query = sample['user_query']
+        true_label = sample['hallucination'] == 'yes'
+        
+        # Run detection
+        result = pas2.detect_hallucination(query, n_paraphrases=3)
+        detected = result['hallucination_detected']
+        
+        if detected == true_label:
+            correct += 1
+        
+        results.append({
+            'id': sample['ID'],
+            'query': query,
+            'true_label': sample['hallucination'],
+            'detected': 'yes' if detected else 'no',
+            'confidence': result['confidence_score'],
+            'summary': result['summary']
+        })
+    
+    # Calculate accuracy
+    accuracy = (correct / len(data)) * 100
+    print(f"Accuracy: {accuracy:.2f}%")
+    
+    # Save results
+    with open('benchmark_results.csv', 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=results[0].keys())
+        writer.writeheader()
+        writer.writerows(results)
+    ```
+  </Step>
+  
+  <Step title="Analyze results">
+    Review the CSV output to identify patterns:
+    
+    ```python
+    import pandas as pd
+    
+    df = pd.read_csv('benchmark_results.csv')
+    
+    # Confusion matrix
+    tp = len(df[(df['true_label'] == 'yes') & (df['detected'] == 'yes')])
+    tn = len(df[(df['true_label'] == 'no') & (df['detected'] == 'no')])
+    fp = len(df[(df['true_label'] == 'no') & (df['detected'] == 'yes')])
+    fn = len(df[(df['true_label'] == 'yes') & (df['detected'] == 'no')])
+    
+    print(f"True Positives: {tp}")
+    print(f"True Negatives: {tn}")
+    print(f"False Positives: {fp}")
+    print(f"False Negatives: {fn}")
+    
+    # Precision and recall
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    
+    print(f"Precision: {precision:.2f}")
+    print(f"Recall: {recall:.2f}")
+    print(f"F1 Score: {f1:.2f}")
+    ```
+  </Step>
+</Steps>
+
+## Parameter tuning
+
+Experiment with different parameter values to optimize performance:
+
+<Tabs>
+  <Tab title="Number of paraphrases">
+    Test different numbers of paraphrases:
+    
+    ```python
+    for n in [2, 3, 5, 7, 10]:
+        results = pas2.detect_hallucination(query, n_paraphrases=n)
+        # Track accuracy for each value
+    ```
+    
+    **Trade-offs:**
+    - More paraphrases = higher accuracy but slower execution
+    - Fewer paraphrases = faster but may miss subtle inconsistencies
+  </Tab>
+  
+  <Tab title="Confidence thresholds">
+    Apply custom confidence thresholds:
+    
+    ```python
+    result = pas2.detect_hallucination(query, n_paraphrases=3)
+    
+    # Use a custom threshold
+    CONFIDENCE_THRESHOLD = 0.75
+    
+    if result['hallucination_detected'] and result['confidence_score'] >= CONFIDENCE_THRESHOLD:
+        print("High-confidence hallucination detected")
+    elif result['hallucination_detected']:
+        print("Low-confidence hallucination detected")
+    else:
+        print("No hallucination detected")
+    ```
+    
+    Tune the threshold based on your tolerance for false positives vs. false negatives.
+  </Tab>
+</Tabs>
+
+## Rate limiting
+
+Add delays between API calls to respect rate limits:
+
+```python
+import time
+
+for sample in data:
+    result = pas2.detect_hallucination(sample['user_query'])
+    # Process result...
+    
+    # Wait 1 second between samples
+    time.sleep(1)
+```
+
+## Logging and debugging
+
+Enable detailed logging to debug issues:
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+logger.info("Starting benchmark evaluation")
+```
+
+The benchmark script logs:
+- Sample processing progress
+- JSON parsing errors
+- API errors and exceptions
+- Final accuracy statistics

@@ -1,0 +1,129 @@
+---
+title: Paraphrasing technique
+description: Learn how PAS2 uses semantic paraphrases to test response consistency and detect potential hallucinations
+---
+
+## Overview
+
+The paraphrasing technique is the foundation of PAS2's hallucination detection approach. By generating semantically equivalent variations of a query, PAS2 can test whether an AI model provides consistent answers to questions that ask for the same information in different ways.
+
+## How it works
+
+PAS2 generates multiple paraphrases of the original query using the Mistral API. These paraphrases preserve the original meaning while varying the wording and structure.
+
+<Steps>
+  <Step title="Original query input">
+    The user provides an original query that will be tested for hallucination potential.
+  </Step>
+  
+  <Step title="Paraphrase generation">
+    The system generates N paraphrases (default: 3) using a language model with specific instructions to maintain semantic equivalence.
+  </Step>
+  
+  <Step title="Query collection">
+    The original query and all paraphrases are combined into a single collection for parallel processing.
+  </Step>
+</Steps>
+
+## Implementation details
+
+The `generate_paraphrases()` method is responsible for creating semantic variations:
+
+```python
+def generate_paraphrases(self, query: str, n_paraphrases: int = 3) -> List[str]:
+    """Generate paraphrases of the input query using Mistral API"""
+```
+
+### Method signature
+
+**Parameters:**
+- `query` (str): The original question or prompt to paraphrase
+- `n_paraphrases` (int): Number of paraphrases to generate (default: 3)
+
+**Returns:**
+- `List[str]`: A list containing the original query plus N paraphrases
+
+### System prompt
+
+The paraphrasing process uses a carefully crafted system prompt:
+
+```python
+messages = [
+    {
+        "role": "system",
+        "content": f"You are an expert at creating semantically equivalent paraphrases. Generate {n_paraphrases} different paraphrases of the given query that preserve the original meaning but vary in wording and structure. Return a JSON array of strings, each containing one paraphrase."
+    },
+    {
+        "role": "user",
+        "content": query
+    }
+]
+```
+
+<Note>
+The system uses JSON mode (`response_format={"type": "json_object"}`) to ensure structured output that can be reliably parsed.
+</Note>
+
+## Response handling
+
+The implementation handles multiple JSON structures flexibly:
+
+<Accordion title="JSON structure variations">
+  The code handles three common response formats:
+  
+  1. **Object with "paraphrases" key**: `{"paraphrases": [...]}`
+  2. **Object with "results" key**: `{"results": [...]}`
+  3. **Direct array**: `["paraphrase1", "paraphrase2", ...]`
+  
+  If none of these match, the system searches for any field containing a list.
+</Accordion>
+
+```python
+if isinstance(paraphrases_data, dict) and "paraphrases" in paraphrases_data:
+    paraphrases = paraphrases_data["paraphrases"]
+elif isinstance(paraphrases_data, dict) and "results" in paraphrases_data:
+    paraphrases = paraphrases_data["results"]
+elif isinstance(paraphrases_data, list):
+    paraphrases = paraphrases_data
+```
+
+## Fallback mechanism
+
+When paraphrase generation fails, PAS2 uses a fallback strategy to ensure the detection process can continue:
+
+```python
+fallback_paraphrases = [
+    query,
+    f"Could you tell me about {query.strip('?')}?",
+    f"I'd like to know: {query}",
+    f"Please provide information on {query.strip('?')}."
+][:n_paraphrases+1]
+```
+
+<Info>
+The fallback mechanism generates simple template-based paraphrases. While less sophisticated than model-generated paraphrases, this ensures the system remains functional even during API failures.
+</Info>
+
+## Query collection structure
+
+The method returns a list where:
+- **Index 0**: Original query (unchanged)
+- **Index 1-N**: Generated paraphrases
+
+```python
+# Add the original query as the first item
+all_queries = [query] + paraphrases
+```
+
+This structure ensures that the original query is always processed first, allowing for direct comparison with paraphrased responses.
+
+## Performance considerations
+
+The paraphrasing step typically completes in 1-3 seconds, depending on:
+- API response time
+- Number of paraphrases requested
+- Complexity of the original query
+
+<Note>
+All paraphrase generation is logged with timing information for monitoring and debugging purposes (pas2.py:116).
+</Note>

@@ -1,0 +1,204 @@
+---
+title: Hallucination detection
+description: Understand how PAS2 detects hallucinations by analyzing response consistency across semantically equivalent queries
+---
+
+## Overview
+
+Hallucination detection in PAS2 works by comparing responses to semantically equivalent queries. If an AI model provides inconsistent or contradictory information when answering the same question phrased differently, this indicates potential hallucination.
+
+## Detection workflow
+
+The complete detection process follows a multi-stage pipeline:
+
+<Steps>
+  <Step title="Paraphrase generation">
+    Generate N semantic paraphrases of the original query using the Mistral API.
+  </Step>
+  
+  <Step title="Response collection">
+    Query the target model with the original query and all paraphrases to collect responses.
+  </Step>
+  
+  <Step title="Response comparison">
+    Use a judge model (OpenAI o3-mini) to analyze all responses for factual inconsistencies.
+  </Step>
+  
+  <Step title="Judgment generation">
+    Generate a structured judgment with confidence scores, conflicting facts, and detailed reasoning.
+  </Step>
+</Steps>
+
+## Main detection method
+
+The `detect_hallucination()` method orchestrates the entire process:
+
+```python
+def detect_hallucination(self, query: str, n_paraphrases: int = 3) -> Dict:
+    """
+    Detect hallucinations by comparing responses to paraphrased queries using a judge model
+    
+    Returns:
+        Dict containing hallucination judgment and all responses
+    """
+```
+
+### Method signature
+
+**Parameters:**
+- `query` (str): The original question to test
+- `n_paraphrases` (int): Number of paraphrases to generate (default: 3)
+
+**Returns:**
+- `Dict`: Complete results including judgment, responses, and analysis
+
+### Return structure
+
+The method returns a comprehensive dictionary (pas2.py:283-293):
+
+```python
+results = {
+    "original_query": original_query,
+    "original_response": original_response,
+    "paraphrased_queries": paraphrased_queries,
+    "paraphrased_responses": paraphrased_responses,
+    "hallucination_detected": judgment.hallucination_detected,
+    "confidence_score": judgment.confidence_score,
+    "conflicting_facts": judgment.conflicting_facts,
+    "reasoning": judgment.reasoning,
+    "summary": judgment.summary
+}
+```
+
+## Response collection
+
+PAS2 uses parallel processing to efficiently collect responses from multiple queries:
+
+<Info>
+The system uses ThreadPoolExecutor with up to 5 concurrent workers to speed up response collection while avoiding API rate limits.
+</Info>
+
+### Parallel response gathering
+
+```python
+def get_responses(self, queries: List[str]) -> List[str]:
+    """Get responses from Mistral API for each query in parallel"""
+    with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+        # Submit tasks and map them to their original indices
+        future_to_index = {
+            executor.submit(self._get_single_response, query, i): i 
+            for i, query in enumerate(queries)
+        }
+```
+
+This approach ensures:
+- Responses are collected in the correct order
+- Failed requests don't block other responses
+- Progress can be tracked incrementally
+
+### Individual response method
+
+Each response is obtained through `_get_single_response()` (pas2.py:138-172):
+
+```python
+def _get_single_response(self, query: str, index: int = None) -> str:
+    """Get a single response from Mistral API for a query"""
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful AI assistant. Provide accurate, factual information in response to questions."
+        },
+        {
+            "role": "user",
+            "content": query
+        }
+    ]
+```
+
+<Note>
+The system prompt is intentionally generic to avoid biasing the model's responses. This allows natural variations and potential hallucinations to emerge.
+</Note>
+
+## Progress tracking
+
+The detection process supports real-time progress callbacks through multiple stages:
+
+<Accordion title="Progress stages">
+  1. **starting**: Initial setup (5% progress)
+  2. **generating_paraphrases**: Creating query variations (15% progress)
+  3. **paraphrases_complete**: Paraphrases ready (30% progress)
+  4. **getting_responses**: Collecting model responses (35% progress)
+  5. **responses_progress**: Incremental updates per response (40-65% progress)
+  6. **responses_complete**: All responses collected (65% progress)
+  7. **judging**: Analyzing for hallucinations (70% progress)
+  8. **complete**: Process finished (100% progress)
+</Accordion>
+
+```python
+if self.progress_callback:
+    self.progress_callback("starting", query=query)
+```
+
+## Judgment data model
+
+The detection results are structured using a Pydantic model for type safety:
+
+```python
+class HallucinationJudgment(BaseModel):
+    hallucination_detected: bool = Field(
+        description="Whether a hallucination is detected across the responses"
+    )
+    confidence_score: float = Field(
+        description="Confidence score between 0-1 for the hallucination judgment"
+    )
+    conflicting_facts: List[Dict[str, Any]] = Field(
+        description="List of conflicting facts found in the responses"
+    )
+    reasoning: str = Field(
+        description="Detailed reasoning for the judgment"
+    )
+    summary: str = Field(
+        description="A summary of the analysis"
+    )
+```
+
+## Error handling
+
+The system includes comprehensive error handling at each stage:
+
+<Steps>
+  <Step title="Response errors">
+    If a single response fails, it returns an error message but continues processing other queries.
+  </Step>
+  
+  <Step title="Judgment errors">
+    If the judge model fails, a fallback judgment is returned with `hallucination_detected=False` and `confidence_score=0.0`.
+  </Step>
+  
+  <Step title="Complete failure">
+    If the entire process fails, the error is logged and returned in the results dictionary.
+  </Step>
+</Steps>
+
+```python
+except Exception as e:
+    logger.error("Error in hallucination judgment: %s", str(e), exc_info=True)
+    return HallucinationJudgment(
+        hallucination_detected=False,
+        confidence_score=0.0,
+        conflicting_facts=[],
+        reasoning="Failed to obtain judgment from the model.",
+        summary="Analysis failed due to API error."
+    )
+```
+
+## Performance metrics
+
+The entire detection process typically completes in 5-15 seconds, depending on:
+- Number of paraphrases (more paraphrases = longer processing)
+- API response times (network latency and model speed)
+- Query complexity (longer responses take more time)
+
+<Info>
+All timing information is logged for monitoring and optimization purposes. Check the logs for detailed performance breakdowns (pas2.py:299).
+</Info>

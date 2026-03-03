@@ -1,0 +1,262 @@
+---
+title: Local deployment options
+description: Run PAS2 hallucination detection system on your local machine for development and testing
+---
+
+Set up and run the PAS2 application locally for development, testing, or private use.
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the PAS2 repository to your local machine:
+
+    ```bash
+    git clone https://github.com/serhanylmz/pas2
+    cd pas2
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install the required Python packages:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    Required dependencies:
+    - `gradio` - Web interface framework
+    - `pandas` - Data manipulation
+    - `numpy` - Numerical computing
+    - `mistralai` - Mistral AI API client
+    - `openai` - OpenAI API client
+    - `pydantic` - Data validation
+    - `python-dotenv` - Environment variable management
+  </Step>
+
+  <Step title="Configure API keys">
+    Set up your API keys using one of these methods:
+
+    **Option 1: Environment variables**
+
+    Export the keys in your terminal:
+    ```bash
+    export MISTRAL_API_KEY=your_mistral_api_key_here
+    export OPENAI_API_KEY=your_openai_api_key_here
+    ```
+
+    **Option 2: .env file**
+
+    Create a `.env` file in the project root:
+    ```bash
+    MISTRAL_API_KEY=your_mistral_api_key_here
+    OPENAI_API_KEY=your_openai_api_key_here
+    ```
+
+    <Warning>
+      Never commit your `.env` file to version control. Add it to `.gitignore` to prevent accidental exposure of your API keys.
+    </Warning>
+  </Step>
+
+  <Step title="Run the application">
+    Launch the Gradio web interface:
+
+    ```bash
+    python pas2.py
+    ```
+
+    The application will start and display a local URL:
+    ```
+    Running on local URL:  http://127.0.0.1:7860
+    ```
+
+    Open this URL in your web browser to access the interface.
+  </Step>
+</Steps>
+
+## Local storage configuration
+
+When running locally, the application stores data differently than in Hugging Face Spaces:
+
+### Primary storage location
+
+By default, the application attempts to use a `/data` directory (pas2.py:384):
+```python
+self.data_dir = "/data"
+self.db_path = os.path.join(self.data_dir, "feedback.db")
+```
+
+### Fallback storage
+
+If `/data` is not accessible (common on local systems), the application automatically falls back to a temporary directory (pas2.py:423-427):
+```python
+temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_data")
+os.makedirs(temp_dir, exist_ok=True)
+self.db_path = os.path.join(temp_dir, "feedback.db")
+```
+
+This creates a `temp_data` directory in your project folder to store the SQLite database.
+
+<Note>
+  The feedback database persists between runs as long as the `temp_data` directory remains intact. You can safely delete this directory to reset all stored feedback and statistics.
+</Note>
+
+## Database schema
+
+The SQLite database automatically initializes with the following schema (pas2.py:401-416):
+
+```sql
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    original_query TEXT,
+    original_response TEXT,
+    paraphrased_queries TEXT,
+    paraphrased_responses TEXT,
+    hallucination_detected INTEGER,
+    confidence_score REAL,
+    conflicting_facts TEXT,
+    reasoning TEXT,
+    summary TEXT,
+    user_feedback TEXT
+)
+```
+
+## Model configuration
+
+The application uses the following AI models (pas2.py:57-58):
+
+- **Response generation**: `mistral-large-latest` (Mistral AI)
+- **Hallucination judgment**: `o3-mini` (OpenAI)
+
+These models are configured automatically and do not require manual configuration.
+
+## Development mode
+
+For development, you can customize the Gradio interface settings:
+
+```python
+# Enable hot reload and detailed debugging
+demo.launch(
+    debug=True,
+    share=False,
+    server_name="127.0.0.1",
+    server_port=7860
+)
+```
+
+## Library usage
+
+You can also use PAS2 as a Python library without the web interface:
+
+```python
+from pas2 import PAS2
+
+# Initialize with API keys
+detector = PAS2(
+    mistral_api_key="your_mistral_key",
+    openai_api_key="your_openai_key"
+)
+
+# Detect hallucinations
+results = detector.detect_hallucination(
+    query="Who was the first person to land on the moon?",
+    n_paraphrases=3
+)
+
+# Access results
+print(f"Hallucination detected: {results['hallucination_detected']}")
+print(f"Confidence: {results['confidence_score']}")
+print(f"Summary: {results['summary']}")
+```
+
+## Performance considerations
+
+### API rate limits
+
+Be aware of rate limits for both APIs:
+- Monitor your API usage in the respective dashboards
+- Reduce `n_paraphrases` parameter to minimize API calls
+- Implement delays between requests if needed
+
+### Parallel processing
+
+The application uses parallel API calls for efficiency (pas2.py:180):
+```python
+with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+```
+
+This processes up to 5 queries simultaneously. Adjust `max_workers` if you experience rate limiting.
+
+### Logging configuration
+
+The application logs all operations at INFO level (pas2.py:20-26). To adjust logging:
+
+```python
+import logging
+
+# Set to DEBUG for more detailed logs
+logging.basicConfig(level=logging.DEBUG)
+
+# Set to WARNING to reduce log output
+logging.basicConfig(level=logging.WARNING)
+```
+
+## Troubleshooting
+
+### Module not found errors
+
+If you encounter import errors:
+```bash
+pip install -r requirements.txt --upgrade
+```
+
+### API authentication failures
+
+Verify your API keys are set correctly:
+```python
+import os
+print(os.environ.get('MISTRAL_API_KEY'))
+print(os.environ.get('OPENAI_API_KEY'))
+```
+
+### Database locked errors
+
+If SQLite reports database locks:
+- Ensure only one instance of the application is running
+- Check file permissions on the `temp_data` directory
+- Delete `temp_data/feedback.db` and restart
+
+### Port already in use
+
+If port 7860 is already in use:
+```python
+demo.launch(server_port=7861)  # Use a different port
+```
+
+## Security best practices
+
+<Warning>
+  When running locally, protect your API keys:
+  - Never hardcode API keys in source files
+  - Use environment variables or `.env` files
+  - Add `.env` to `.gitignore`
+  - Rotate keys if they are accidentally exposed
+</Warning>
+
+## Sharing your local instance
+
+Gradio allows temporary public sharing:
+
+```python
+demo.launch(share=True)
+```
+
+This generates a temporary public URL valid for 72 hours. Use this for:
+- Quick demos
+- User testing
+- Temporary collaboration
+
+<Note>
+  For permanent public deployment, use Hugging Face Spaces instead of local sharing.
+</Note>

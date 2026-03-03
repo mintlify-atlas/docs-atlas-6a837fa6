@@ -1,0 +1,133 @@
+---
+title: PAS2 class
+description: Core class implementing the Paraphrase-based Approach for Scrutinizing Systems using model-as-judge methodology
+---
+
+## Overview
+
+The `PAS2` class is the main implementation of the Paraphrase-based Approach for Scrutinizing Systems. It uses a model-as-judge methodology to detect hallucinations by comparing responses to paraphrased versions of the same query.
+
+## Constructor
+
+```python
+PAS2(mistral_api_key=None, openai_api_key=None, progress_callback=None)
+```
+
+Initialize the PAS2 detector with API credentials.
+
+<ParamField path="mistral_api_key" type="str | None" default="None">
+  Mistral API key. If not provided, reads from `HF_MISTRAL_API_KEY` or `MISTRAL_API_KEY` environment variables.
+</ParamField>
+
+<ParamField path="openai_api_key" type="str | None" default="None">
+  OpenAI API key. If not provided, reads from `HF_OPENAI_API_KEY` or `OPENAI_API_KEY` environment variables.
+</ParamField>
+
+<ParamField path="progress_callback" type="callable | None" default="None">
+  Optional callback function to receive progress updates during detection.
+</ParamField>
+
+<Warning>
+  Both Mistral and OpenAI API keys are required. The class will raise `ValueError` if either key is missing.
+</Warning>
+
+## Class attributes
+
+<ResponseField name="mistral_client" type="Mistral">
+  Initialized Mistral API client instance.
+</ResponseField>
+
+<ResponseField name="openai_client" type="OpenAI">
+  Initialized OpenAI API client instance.
+</ResponseField>
+
+<ResponseField name="mistral_model" type="str">
+  Model identifier for Mistral API (default: `"mistral-large-latest"`).
+</ResponseField>
+
+<ResponseField name="openai_model" type="str">
+  Model identifier for OpenAI API (default: `"o3-mini"`).
+</ResponseField>
+
+<ResponseField name="progress_callback" type="callable | None">
+  Registered callback function for progress updates.
+</ResponseField>
+
+## Methods
+
+### generate_paraphrases
+
+Generate paraphrased versions of a query. See [generate_paraphrases](/api/generate-paraphrases) for details.
+
+### detect_hallucination
+
+Detect hallucinations by analyzing responses to paraphrased queries. See [detect_hallucination](/api/detect-hallucination) for details.
+
+### judge_hallucination
+
+Use a judge model to evaluate responses for hallucinations. See [judge_hallucination](/api/judge-hallucination) for details.
+
+### get_responses
+
+```python
+get_responses(queries: List[str]) -> List[str]
+```
+
+Get responses from Mistral API for multiple queries in parallel.
+
+<ParamField path="queries" type="List[str]" required>
+  List of query strings to send to the model.
+</ParamField>
+
+<ResponseField name="return" type="List[str]">
+  List of response strings, one for each query in the same order.
+</ResponseField>
+
+<Note>
+  This method uses `ThreadPoolExecutor` with a maximum of 5 parallel workers to fetch responses efficiently.
+</Note>
+
+## Example usage
+
+```python
+from pas2 import PAS2
+
+# Initialize with API keys
+detector = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
+)
+
+# Detect hallucinations in a query
+results = detector.detect_hallucination(
+    query="Who was the first person to land on the moon?",
+    n_paraphrases=3
+)
+
+print(f"Hallucination detected: {results['hallucination_detected']}")
+print(f"Confidence: {results['confidence_score']}")
+print(f"Summary: {results['summary']}")
+```
+
+## Example with progress callback
+
+```python
+def progress_handler(stage, **kwargs):
+    print(f"Stage: {stage}, Data: {kwargs}")
+
+detector = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key",
+    progress_callback=progress_handler
+)
+
+results = detector.detect_hallucination("What is the capital of France?")
+```
+
+## Environment variable priority
+
+The class checks for API keys in the following order:
+
+1. Constructor parameters (`mistral_api_key`, `openai_api_key`)
+2. Hugging Face Spaces secrets (`HF_MISTRAL_API_KEY`, `HF_OPENAI_API_KEY`)
+3. Standard environment variables (`MISTRAL_API_KEY`, `OPENAI_API_KEY`)

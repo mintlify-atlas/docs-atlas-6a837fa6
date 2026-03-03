@@ -1,0 +1,159 @@
+---
+title: Deploying to Hugging Face Spaces
+description: Deploy PAS2 hallucination detection system to Hugging Face Spaces with persistent storage
+---
+
+Deploy your PAS2 application to Hugging Face Spaces for a publicly accessible web interface with automatic persistent storage.
+
+## Prerequisites
+
+Before deploying to Hugging Face Spaces, ensure you have:
+
+- A Hugging Face account
+- Mistral AI API key
+- OpenAI API key
+- Your PAS2 repository ready for deployment
+
+## Deployment steps
+
+<Steps>
+  <Step title="Create a new Space">
+    1. Go to [Hugging Face Spaces](https://huggingface.co/spaces)
+    2. Click "Create new Space"
+    3. Choose a name for your Space
+    4. Select **Gradio** as the SDK
+    5. Choose your preferred visibility (Public or Private)
+  </Step>
+
+  <Step title="Add your repository">
+    Connect your PAS2 repository to the Space:
+    - Upload your files directly, or
+    - Link to your GitHub repository for automatic syncing
+    
+    Ensure these files are included:
+    - `pas2.py` (main application code)
+    - `requirements.txt` (dependencies)
+    - `README.md` (optional documentation)
+  </Step>
+
+  <Step title="Configure API keys as secrets">
+    Set your API keys in the Space's settings to keep them secure:
+    
+    1. Navigate to your Space's **Settings** tab
+    2. Scroll to the **Repository secrets** section
+    3. Add the following secrets:
+
+    ```bash
+    HF_MISTRAL_API_KEY=your_mistral_api_key_here
+    HF_OPENAI_API_KEY=your_openai_api_key_here
+    ```
+
+    <Note>
+      The application automatically reads these environment variables from lines pas2.py:44-45. The `HF_*` prefix is used specifically for Hugging Face Spaces secrets.
+    </Note>
+  </Step>
+
+  <Step title="Enable persistent storage">
+    Hugging Face Spaces automatically provides a `/data` directory for persistent storage. The PAS2 application uses this for the SQLite feedback database.
+
+    The persistent storage setup is configured in pas2.py:384-386:
+    ```python
+    self.data_dir = "/data"
+    self.db_path = os.path.join(self.data_dir, "feedback.db")
+    ```
+
+    This ensures:
+    - User feedback survives Space restarts
+    - Statistics are preserved long-term
+    - No data loss during inactivity periods
+
+    <Warning>
+      If the `/data` directory is not accessible, the application will fall back to a temporary directory (pas2.py:423-427). However, data in this fallback location will not persist across restarts.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy and verify">
+    1. Commit your changes to trigger the build
+    2. Wait for the Space to build (this may take a few minutes)
+    3. Once built, your application will be accessible at:
+       ```
+       https://huggingface.co/spaces/YOUR_USERNAME/YOUR_SPACE_NAME
+       ```
+    4. Test the application by entering a query and verifying the hallucination detection works
+  </Step>
+</Steps>
+
+## Environment variable configuration
+
+The application supports multiple API key configurations with the following priority order:
+
+1. Explicitly passed parameters
+2. Hugging Face Spaces secrets (`HF_MISTRAL_API_KEY`, `HF_OPENAI_API_KEY`)
+3. Standard environment variables (`MISTRAL_API_KEY`, `OPENAI_API_KEY`)
+
+From pas2.py:44-45:
+```python
+self.mistral_api_key = mistral_api_key or os.environ.get("HF_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
+self.openai_api_key = openai_api_key or os.environ.get("HF_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+```
+
+## Required dependencies
+
+Your `requirements.txt` should include:
+
+```txt
+gradio
+pandas
+numpy
+mistralai
+openai
+pydantic
+python-dotenv
+```
+
+## Data persistence details
+
+The SQLite database stores:
+- User query history
+- Original and paraphrased responses
+- Hallucination detection results
+- User feedback ratings
+- Confidence scores and reasoning
+
+Database initialization occurs automatically on first run (pas2.py:390-420), creating the necessary schema in the `/data` directory.
+
+## Monitoring your deployment
+
+After deployment, you can:
+
+- View real-time logs in the Space's **Logs** tab
+- Monitor usage statistics through the built-in dashboard
+- Check feedback data persistence by submitting test queries
+- Review API usage to ensure rate limits are not exceeded
+
+<Note>
+  The application logs all operations using Python's logging module with INFO level. Check the logs if you encounter API initialization errors or database issues.
+</Note>
+
+## Troubleshooting
+
+### API keys not found
+
+If you see "API key is required" errors:
+- Verify secrets are set correctly in Space settings
+- Ensure secret names match exactly: `HF_MISTRAL_API_KEY` and `HF_OPENAI_API_KEY`
+- Restart the Space after adding secrets
+
+### Database initialization fails
+
+If the database fails to initialize:
+- Check the logs for permission errors
+- Verify the Space has persistent storage enabled
+- The application will attempt fallback to temporary directory
+
+### Build failures
+
+If the Space fails to build:
+- Verify `requirements.txt` includes all dependencies
+- Check for syntax errors in `pas2.py`
+- Review build logs for specific error messages

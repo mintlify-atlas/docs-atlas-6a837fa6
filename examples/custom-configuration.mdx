@@ -1,0 +1,260 @@
+---
+title: Custom configuration
+description: Configure PAS2 with custom models, callbacks, and advanced settings
+---
+
+Customize PAS2 behavior by configuring models, progress tracking, and other advanced options.
+
+## Using custom models
+
+Specify which models to use for different tasks:
+
+```python
+from pas2 import PAS2
+import os
+
+# Initialize with custom model selection
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# The default models are:
+# - mistral_model: "mistral-large-latest"
+# - openai_model: "o3-mini"
+
+print(f"Using Mistral model: {pas2.mistral_model}")
+print(f"Using OpenAI model: {pas2.openai_model}")
+```
+
+**Expected output:**
+
+```
+Using Mistral model: mistral-large-latest
+Using OpenAI model: o3-mini
+```
+
+## Progress tracking with callbacks
+
+Monitor the detection process with progress callbacks:
+
+<CodeGroup>
+
+```python With callback
+from pas2 import PAS2
+import os
+
+def progress_callback(stage, **kwargs):
+    """Custom progress tracking callback"""
+    if stage == "starting":
+        print(f"Starting analysis for: {kwargs.get('query')}")
+    elif stage == "generating_paraphrases":
+        print("Generating paraphrases...")
+    elif stage == "paraphrases_complete":
+        print(f"Generated {kwargs.get('count')} paraphrases")
+    elif stage == "responses_progress":
+        completed = kwargs.get('completed_responses', 0)
+        total = kwargs.get('total_responses', 0)
+        print(f"Getting responses: {completed}/{total}")
+    elif stage == "judging":
+        print("Analyzing for hallucinations...")
+    elif stage == "complete":
+        print("Analysis complete!")
+
+# Initialize with progress callback
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY"),
+    progress_callback=progress_callback
+)
+
+results = pas2.detect_hallucination(
+    "Who wrote the novel 1984?",
+    n_paraphrases=2
+)
+```
+
+```python Without callback
+from pas2 import PAS2
+import os
+
+# Initialize without progress callback
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Run detection silently
+results = pas2.detect_hallucination(
+    "Who wrote the novel 1984?",
+    n_paraphrases=2
+)
+```
+
+</CodeGroup>
+
+**Expected output (with callback):**
+
+```
+Starting analysis for: Who wrote the novel 1984?
+Generating paraphrases...
+Generated 3 paraphrases
+Getting responses: 0/3
+Getting responses: 1/3
+Getting responses: 2/3
+Getting responses: 3/3
+Analyzing for hallucinations...
+Analysis complete!
+```
+
+## Configuring number of paraphrases
+
+Adjust the number of paraphrases to balance accuracy and speed:
+
+<CodeGroup>
+
+```python Quick (2 paraphrases)
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Faster, less thorough
+results = pas2.detect_hallucination(
+    "What was the first computer?",
+    n_paraphrases=2
+)
+```
+
+```python Standard (3 paraphrases)
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Balanced speed and accuracy (default)
+results = pas2.detect_hallucination(
+    "What was the first computer?",
+    n_paraphrases=3
+)
+```
+
+```python Thorough (5 paraphrases)
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Slower, more thorough
+results = pas2.detect_hallucination(
+    "What was the first computer?",
+    n_paraphrases=5
+)
+```
+
+</CodeGroup>
+
+**Performance comparison:**
+
+| Paraphrases | Processing time | Accuracy |
+|-------------|----------------|----------|
+| 2           | ~10-15 seconds | Good     |
+| 3           | ~15-20 seconds | Better   |
+| 5           | ~25-35 seconds | Best     |
+
+## Using the hallucination judgment model
+
+Direct access to the judgment functionality:
+
+```python
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Prepare your queries and responses
+original_query = "What is the capital of France?"
+original_response = "The capital of France is Paris."
+paraphrased_queries = [
+    "Can you tell me France's capital city?",
+    "Which city is the capital of France?"
+]
+paraphrased_responses = [
+    "France's capital city is Paris.",
+    "The capital city of France is Paris."
+]
+
+# Judge for hallucinations
+judgment = pas2.judge_hallucination(
+    original_query=original_query,
+    original_response=original_response,
+    paraphrased_queries=paraphrased_queries,
+    paraphrased_responses=paraphrased_responses
+)
+
+print(f"Hallucination detected: {judgment.hallucination_detected}")
+print(f"Confidence: {judgment.confidence_score}")
+print(f"Summary: {judgment.summary}")
+```
+
+**Expected output:**
+
+```
+Hallucination detected: False
+Confidence: 0.95
+Summary: All responses consistently and accurately identify Paris as the capital of France with no conflicting information.
+```
+
+## Logging configuration
+
+Customize logging output for debugging:
+
+```python
+import logging
+from pas2 import PAS2
+import os
+
+# Configure logging level
+logging.basicConfig(
+    level=logging.DEBUG,  # Show detailed debug information
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+
+# Or set specific logger level
+logger = logging.getLogger('pas2')
+logger.setLevel(logging.INFO)
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+results = pas2.detect_hallucination(
+    "What is the speed of light?",
+    n_paraphrases=2
+)
+```
+
+**Expected output:**
+
+```
+2026-03-03 10:15:23 [INFO] PAS2 initialized with Mistral model: mistral-large-latest and OpenAI model: o3-mini
+2026-03-03 10:15:23 [INFO] Starting hallucination detection for query: What is the speed of light?
+2026-03-03 10:15:23 [INFO] Generating 2 paraphrases for query: What is the speed of light?
+2026-03-03 10:15:25 [INFO] Generated 2 paraphrases in 2.15 seconds
+2026-03-03 10:15:25 [INFO] Getting responses for 3 queries in parallel
+...
+```

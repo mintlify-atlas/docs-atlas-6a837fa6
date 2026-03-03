@@ -1,0 +1,183 @@
+---
+title: API key setup
+description: Configure Mistral AI and OpenAI API keys for PAS2
+---
+
+PAS2 requires API keys from both Mistral AI and OpenAI to function. This guide shows you how to obtain and configure these keys.
+
+## Required API keys
+
+PAS2 uses a dual-model architecture:
+
+- **Mistral AI**: For paraphrase generation and response generation (`mistral-large-latest`)
+- **OpenAI**: For hallucination detection judging (`o3-mini`)
+
+<Warning>
+Both API keys are required. PAS2 will raise a `ValueError` if either key is missing.
+</Warning>
+
+## Getting your Mistral AI API key
+
+<Steps>
+  <Step title="Create a Mistral AI account">
+    Visit [Mistral AI](https://mistral.ai) and sign up for an account.
+  </Step>
+  
+  <Step title="Navigate to API keys">
+    Go to your dashboard and find the API keys section.
+  </Step>
+  
+  <Step title="Generate a new API key">
+    Click "Create new key" and copy the generated key. Store it securely.
+  </Step>
+  
+  <Step title="Set the environment variable">
+    Add the key to your `.env` file:
+    ```bash
+    HF_MISTRAL_API_KEY=your_mistral_api_key_here
+    ```
+  </Step>
+</Steps>
+
+## Getting your OpenAI API key
+
+<Steps>
+  <Step title="Create an OpenAI account">
+    Visit [OpenAI Platform](https://platform.openai.com) and sign up for an account.
+  </Step>
+  
+  <Step title="Navigate to API keys">
+    Go to your account settings and select "API keys" from the menu.
+  </Step>
+  
+  <Step title="Generate a new API key">
+    Click "Create new secret key", give it a name, and copy the key. This is your only chance to see the full key.
+  </Step>
+  
+  <Step title="Set the environment variable">
+    Add the key to your `.env` file:
+    ```bash
+    HF_OPENAI_API_KEY=your_openai_api_key_here
+    ```
+  </Step>
+</Steps>
+
+<Note>
+OpenAI API keys are only shown once during creation. Store them securely in a password manager.
+</Note>
+
+## Setting up environment variables
+
+### Local development
+
+Create a `.env` file in your project root:
+
+```bash .env
+HF_MISTRAL_API_KEY=your_mistral_api_key_here
+HF_OPENAI_API_KEY=your_openai_api_key_here
+```
+
+PAS2 automatically loads these variables using `python-dotenv`.
+
+### Hugging Face Spaces deployment
+
+<Steps>
+  <Step title="Open your Space settings">
+    Navigate to your Space on Hugging Face and click on "Settings".
+  </Step>
+  
+  <Step title="Add secrets">
+    Scroll to the "Repository secrets" section.
+  </Step>
+  
+  <Step title="Create secret variables">
+    Add two new secrets:
+    - Name: `HF_MISTRAL_API_KEY`, Value: your Mistral API key
+    - Name: `HF_OPENAI_API_KEY`, Value: your OpenAI API key
+  </Step>
+  
+  <Step title="Restart your Space">
+    The Space will automatically restart and load the new secrets.
+  </Step>
+</Steps>
+
+<Warning>
+Never commit API keys to your repository. Always use environment variables or secrets management.
+</Warning>
+
+## Passing API keys programmatically
+
+You can also pass API keys directly when initializing PAS2:
+
+```python
+from pas2 import PAS2
+
+pas2 = PAS2(
+    mistral_api_key="your_mistral_api_key",
+    openai_api_key="your_openai_api_key"
+)
+```
+
+<Note>
+This method takes priority over environment variables but is less secure for production use.
+</Note>
+
+## Verifying API key configuration
+
+Test your API key setup:
+
+```python
+from pas2 import PAS2
+import os
+
+try:
+    # Try initializing with environment variables
+    pas2 = PAS2(
+        mistral_api_key=os.environ.get("HF_MISTRAL_API_KEY"),
+        openai_api_key=os.environ.get("HF_OPENAI_API_KEY")
+    )
+    print("API keys configured successfully!")
+except ValueError as e:
+    print(f"Configuration error: {e}")
+```
+
+## Troubleshooting
+
+### Missing API key errors
+
+If you see:
+```
+ValueError: Mistral API key is required. Set it via HF_MISTRAL_API_KEY...
+```
+
+Check that:
+- Your `.env` file exists and is in the correct location
+- The variable names are spelled correctly (`HF_MISTRAL_API_KEY`, `HF_OPENAI_API_KEY`)
+- There are no extra spaces or quotes around the keys
+
+### API authentication errors
+
+If you see authentication errors when making API calls:
+
+- Verify your API keys are valid and active
+- Check that you have available credits/quota on both platforms
+- Ensure the keys haven't expired or been revoked
+
+## API costs and rate limits
+
+<Note>
+Be aware of API costs. Each query generates multiple API calls:
+- 1 call for paraphrase generation (Mistral)
+- N+1 calls for responses (Mistral, where N = number of paraphrases)
+- 1 call for hallucination judging (OpenAI)
+</Note>
+
+Monitor your usage:
+- Check your Mistral AI dashboard for usage statistics
+- Review OpenAI usage at [platform.openai.com/usage](https://platform.openai.com/usage)
+
+## Next steps
+
+- [Web interface](/guides/web-interface) - Start using PAS2 through the web interface
+- [Python library](/guides/python-library) - Use PAS2 as a Python library in your code
+- [Configuration](/guides/configuration) - Fine-tune PAS2 settings for your use case

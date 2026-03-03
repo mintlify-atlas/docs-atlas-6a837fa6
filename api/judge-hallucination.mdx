@@ -1,0 +1,216 @@
+---
+title: judge_hallucination method
+description: Use a judge model to evaluate responses for hallucinations and factual inconsistencies
+---
+
+## Overview
+
+The `judge_hallucination` method uses OpenAI's o3-mini model as an independent judge to analyze multiple responses and detect hallucinations. It compares the original response with responses to paraphrased queries to identify factual inconsistencies.
+
+## Method signature
+
+```python
+PAS2.judge_hallucination(
+    original_query: str,
+    original_response: str,
+    paraphrased_queries: List[str],
+    paraphrased_responses: List[str]
+) -> HallucinationJudgment
+```
+
+## Parameters
+
+<ParamField path="original_query" type="str" required>
+  The original user query.
+</ParamField>
+
+<ParamField path="original_response" type="str" required>
+  The model's response to the original query.
+</ParamField>
+
+<ParamField path="paraphrased_queries" type="List[str]" required>
+  List of paraphrased versions of the original query.
+</ParamField>
+
+<ParamField path="paraphrased_responses" type="List[str]" required>
+  List of model responses corresponding to each paraphrased query.
+</ParamField>
+
+## Return value
+
+<ResponseField name="return" type="HallucinationJudgment">
+  A `HallucinationJudgment` object containing the judge's analysis. See [HallucinationJudgment](/api/hallucination-judgment) for details.
+</ResponseField>
+
+## Judge model behavior
+
+The method instructs the judge model to:
+
+- Analyze all responses for factual inconsistencies
+- Focus on factual discrepancies, not stylistic differences
+- Identify cases where different facts are stated for the same question
+- Provide structured JSON output with detection results
+
+## System prompt
+
+The judge uses the following instructions:
+
+```
+You are a judge evaluating whether an AI is hallucinating across different responses to semantically equivalent questions.
+Analyze all responses carefully to identify any factual inconsistencies or contradictions.
+Focus on factual discrepancies, not stylistic differences.
+A hallucination is when the AI states different facts in response to questions that are asking for the same information.
+```
+
+## API configuration
+
+The method calls OpenAI's API with JSON mode:
+
+```python
+response = self.openai_client.chat.completions.create(
+    model=self.openai_model,  # "o3-mini"
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Evaluate these responses for hallucinations:\n\n{context}"}
+    ],
+    response_format={"type": "json_object"}
+)
+```
+
+## Example usage
+
+```python
+from pas2 import PAS2
+
+detector = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
+)
+
+# Direct usage of judge method
+judgment = detector.judge_hallucination(
+    original_query="What is the capital of France?",
+    original_response="The capital of France is Paris.",
+    paraphrased_queries=[
+        "Which city is the capital of France?",
+        "What city serves as France's capital?"
+    ],
+    paraphrased_responses=[
+        "Paris is the capital city of France.",
+        "The capital of France is Lyon."
+    ]
+)
+
+print(f"Hallucination detected: {judgment.hallucination_detected}")
+print(f"Confidence: {judgment.confidence_score}")
+print(f"\nReasoning:\n{judgment.reasoning}")
+print(f"\nSummary:\n{judgment.summary}")
+
+if judgment.conflicting_facts:
+    print("\nConflicting facts:")
+    for fact in judgment.conflicting_facts:
+        print(f"  {fact}")
+```
+
+## Example output
+
+```python
+Hallucination detected: True
+Confidence: 0.95
+
+Reasoning:
+The responses show a clear factual inconsistency regarding the capital of France. The original response and the first paraphrased response correctly state that Paris is the capital, while the second paraphrased response incorrectly claims Lyon is the capital. This represents a hallucination where the model provided conflicting factual information.
+
+Summary:
+Hallucination detected with high confidence due to conflicting information about France's capital city.
+```
+
+## Context format
+
+The method constructs a detailed context for the judge:
+
+```
+Original Question: {original_query}
+
+Original Response: 
+{original_response}
+
+Paraphrased Questions and their Responses:
+
+Paraphrased Question 1: {query_1}
+
+Response 1:
+{response_1}
+
+Paraphrased Question 2: {query_2}
+
+Response 2:
+{response_2}
+...
+```
+
+## Fallback judgment
+
+If the judge API call fails, the method returns a safe fallback:
+
+```python
+HallucinationJudgment(
+    hallucination_detected=False,
+    confidence_score=0.0,
+    conflicting_facts=[],
+    reasoning="Failed to obtain judgment from the model.",
+    summary="Analysis failed due to API error."
+)
+```
+
+<Warning>
+  A `confidence_score` of `0.0` indicates that the judgment could not be obtained. Always check the confidence score before relying on detection results.
+</Warning>
+
+## Typical response structure
+
+The judge model returns JSON in this format:
+
+```json
+{
+  "hallucination_detected": true,
+  "confidence_score": 0.85,
+  "conflicting_facts": [
+    {
+      "topic": "Moon landing date",
+      "conflict": "Response 1 states July 20, Response 2 states July 21"
+    }
+  ],
+  "reasoning": "The model provided inconsistent dates...",
+  "summary": "Hallucination detected due to date inconsistency"
+}
+```
+
+## Performance
+
+- Typical response time: 2-5 seconds
+- Uses OpenAI's o3-mini model for efficient judgment
+- Single API call regardless of number of paraphrases
+
+<Note>
+  The judge model focuses specifically on factual inconsistencies. Stylistic differences, different phrasings of the same fact, or varying levels of detail are not considered hallucinations.
+</Note>
+
+## Integration with detect_hallucination
+
+This method is typically called automatically by `detect_hallucination`:
+
+```python
+# High-level API (recommended)
+results = detector.detect_hallucination("Your query here")
+
+# Low-level API (manual control)
+queries = detector.generate_paraphrases("Your query here")
+responses = detector.get_responses(queries)
+judgment = detector.judge_hallucination(
+    original_query=queries[0],
+    original_response=responses[0],
+    paraphrased_queries=queries[1:],
+    paraphrased_responses=responses[1:]
+)
+```

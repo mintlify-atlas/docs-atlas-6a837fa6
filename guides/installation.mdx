@@ -1,0 +1,81 @@
+---
+title: Installation
+description: Learn how to install PAS2 and set up your development environment
+---
+
+PAS2 can be installed using pip or by cloning the repository directly. Choose the method that best fits your workflow.
+
+## Prerequisites
+
+Before installing PAS2, ensure you have:
+
+- Python 3.8 or higher
+- pip package manager
+- Git (for repository installation method)
+
+## Installation methods
+
+<CodeGroup>
+
+```bash pip
+pip install -r requirements.txt
+```
+
+```bash git clone
+git clone https://github.com/serhanylmz/pas2
+cd pas2
+pip install -r requirements.txt
+```
+
+</CodeGroup>
+
+## Required dependencies
+
+The installation will include the following packages:
+
+- **gradio** - Web interface framework
+- **pandas** - Data manipulation and analysis
+- **numpy** - Numerical computing
+- **mistralai** - Mistral AI API client
+- **openai** - OpenAI API client
+- **pydantic** - Data validation
+- **python-dotenv** - Environment variable management
+
+## Verify installation
+
+After installation, verify that all dependencies are correctly installed:
+
+<Steps>
+  <Step title="Check Python version">
+    ```bash
+    python --version
+    ```
+    Ensure you're running Python 3.8 or higher.
+  </Step>
+  
+  <Step title="Verify package installation">
+    ```bash
+    pip list | grep -E "gradio|mistralai|openai"
+    ```
+    Confirm that the core packages are installed.
+  </Step>
+  
+  <Step title="Test import">
+    ```python
+    from pas2 import PAS2
+    print("Installation successful!")
+    ```
+    This should run without errors.
+  </Step>
+</Steps>
+
+<Note>
+If you encounter any import errors, try reinstalling the dependencies with `pip install -r requirements.txt --force-reinstall`.
+</Note>
+
+## Next steps
+
+After installation, proceed to:
+
+- [Configuration](/guides/configuration) - Set up your environment
+- [API keys](/guides/api-keys) - Configure Mistral and OpenAI API keys

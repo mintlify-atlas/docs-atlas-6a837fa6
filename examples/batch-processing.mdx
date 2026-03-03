@@ -1,0 +1,296 @@
+---
+title: Batch processing
+description: Process multiple queries efficiently with parallel execution and batch operations
+---
+
+Process multiple hallucination detection tasks efficiently using batch operations and parallel execution.
+
+## Processing multiple queries
+
+Detect hallucinations for multiple queries in a batch:
+
+```python
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+queries = [
+    "Who was the first person to land on the moon?",
+    "What is the capital of France?",
+    "How many planets are in our solar system?"
+]
+
+results = []
+for query in queries:
+    result = pas2.detect_hallucination(query, n_paraphrases=3)
+    results.append({
+        "query": query,
+        "hallucination_detected": result["hallucination_detected"],
+        "confidence": result["confidence_score"]
+    })
+
+for r in results:
+    status = "DETECTED" if r["hallucination_detected"] else "CLEAN"
+    print(f"[{status}] {r['query']} (confidence: {r['confidence']:.2f})")
+```
+
+**Expected output:**
+
+```
+[CLEAN] Who was the first person to land on the moon? (confidence: 0.95)
+[CLEAN] What is the capital of France? (confidence: 0.98)
+[CLEAN] How many planets are in our solar system? (confidence: 0.92)
+```
+
+## Parallel response retrieval
+
+PAS2 automatically processes responses in parallel using ThreadPoolExecutor:
+
+```python
+from pas2 import PAS2
+import os
+import time
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Generate queries
+query = "What is the speed of light?"
+all_queries = pas2.generate_paraphrases(query, n_paraphrases=5)
+
+print(f"Processing {len(all_queries)} queries in parallel...")
+start_time = time.time()
+
+# Responses are fetched in parallel (max 5 workers)
+responses = pas2.get_responses(all_queries)
+
+elapsed = time.time() - start_time
+print(f"Completed in {elapsed:.2f} seconds")
+print(f"Average time per query: {elapsed/len(all_queries):.2f} seconds")
+```
+
+**Expected output:**
+
+```
+Processing 6 queries in parallel...
+Completed in 8.45 seconds
+Average time per query: 1.41 seconds
+```
+
+## Benchmark evaluation
+
+Run hallucination detection across a dataset for evaluation:
+
+```python
+import json
+import time
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Load test data (JSONL format)
+data = []
+with open('test_data.jsonl', 'r', encoding='utf-8') as f:
+    for line in f:
+        if line.strip():
+            data.append(json.loads(line))
+
+total_samples = len(data)
+correct_detections = 0
+processed = 0
+
+for idx, sample in enumerate(data[:10]):  # Process first 10 samples
+    user_query = sample.get('user_query')
+    true_label = sample.get('hallucination')  # 'yes' or 'no'
+    
+    # Detect hallucination
+    results = pas2.detect_hallucination(
+        user_query,
+        n_paraphrases=3
+    )
+    
+    detected = results["hallucination_detected"]
+    true_hallucinated = true_label.lower() == 'yes'
+    
+    if detected == true_hallucinated:
+        correct_detections += 1
+    
+    processed += 1
+    
+    if (idx + 1) % 5 == 0:
+        print(f"Processed {idx + 1}/{total_samples} samples...")
+    
+    time.sleep(1)  # Rate limiting
+
+accuracy = (correct_detections / processed * 100) if processed > 0 else 0
+print(f"\nAccuracy: {accuracy:.2f}%")
+print(f"Correct: {correct_detections}/{processed}")
+```
+
+**Expected output:**
+
+```
+Processed 5/100 samples...
+Processed 10/100 samples...
+
+Accuracy: 85.00%
+Correct: 8/10
+```
+
+## Saving results to database
+
+Store hallucination detection results with feedback:
+
+```python
+import sqlite3
+from datetime import datetime
+from pas2 import PAS2
+import os
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+# Initialize database
+conn = sqlite3.connect('hallucination_results.db')
+cursor = conn.cursor()
+
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT,
+        query TEXT,
+        hallucination_detected INTEGER,
+        confidence_score REAL,
+        reasoning TEXT,
+        summary TEXT
+    )
+''')
+conn.commit()
+
+# Process queries and save results
+queries = [
+    "Who was the first person to land on the moon?",
+    "What is the capital of France?"
+]
+
+for query in queries:
+    result = pas2.detect_hallucination(query, n_paraphrases=3)
+    
+    cursor.execute('''
+        INSERT INTO results (
+            timestamp, query, hallucination_detected,
+            confidence_score, reasoning, summary
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    ''', (
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        query,
+        1 if result["hallucination_detected"] else 0,
+        result["confidence_score"],
+        result["reasoning"],
+        result["summary"]
+    ))
+    conn.commit()
+    print(f"Saved result for: {query}")
+
+# Query statistics
+cursor.execute("SELECT COUNT(*) FROM results")
+total = cursor.fetchone()[0]
+
+cursor.execute("SELECT COUNT(*) FROM results WHERE hallucination_detected = 1")
+detected = cursor.fetchone()[0]
+
+print(f"\nTotal results: {total}")
+print(f"Hallucinations detected: {detected}")
+
+conn.close()
+```
+
+**Expected output:**
+
+```
+Saved result for: Who was the first person to land on the moon?
+Saved result for: What is the capital of France?
+
+Total results: 2
+Hallucinations detected: 0
+```
+
+## Batch processing with error handling
+
+Handle errors gracefully when processing multiple queries:
+
+```python
+from pas2 import PAS2
+import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+pas2 = PAS2(
+    mistral_api_key=os.environ.get("MISTRAL_API_KEY"),
+    openai_api_key=os.environ.get("OPENAI_API_KEY")
+)
+
+queries = [
+    "Who was the first person to land on the moon?",
+    "",  # Empty query
+    "What is the capital of France?",
+    "How many planets are in our solar system?"
+]
+
+successful = 0
+failed = 0
+
+for idx, query in enumerate(queries, 1):
+    if not query.strip():
+        logger.warning(f"Skipping empty query at position {idx}")
+        failed += 1
+        continue
+    
+    try:
+        result = pas2.detect_hallucination(query, n_paraphrases=2)
+        
+        if "error" in result:
+            logger.error(f"Error processing query {idx}: {result['error']}")
+            failed += 1
+        else:
+            successful += 1
+            status = "DETECTED" if result["hallucination_detected"] else "CLEAN"
+            logger.info(f"[{status}] Query {idx}: {query[:50]}...")
+    
+    except Exception as e:
+        logger.error(f"Exception processing query {idx}: {str(e)}")
+        failed += 1
+
+print(f"\nProcessing complete:")
+print(f"Successful: {successful}")
+print(f"Failed: {failed}")
+print(f"Total: {successful + failed}")
+```
+
+**Expected output:**
+
+```
+WARNING:__main__:Skipping empty query at position 2
+INFO:__main__:[CLEAN] Query 1: Who was the first person to land on the moon?...
+INFO:__main__:[CLEAN] Query 3: What is the capital of France?...
+INFO:__main__:[CLEAN] Query 4: How many planets are in our solar system?...
+
+Processing complete:
+Successful: 3
+Failed: 1
+Total: 4
+```

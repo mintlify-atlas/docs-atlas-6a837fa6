@@ -1,0 +1,395 @@
+---
+title: Using PAS2 as a Python library
+description: Integrate hallucination detection into your Python applications using the PAS2 library
+---
+
+The PAS2 library provides a Python API for detecting hallucinations programmatically. This allows you to integrate hallucination detection into your own applications, pipelines, and workflows.
+
+## Installation
+
+Import the PAS2 class from the library:
+
+```python
+from pas2 import PAS2
+```
+
+## Initialization
+
+Initialize the PAS2 detector with your API keys:
+
+```python
+# Initialize with API keys directly
+pas2 = PAS2(
+    mistral_api_key="your-mistral-api-key",
+    openai_api_key="your-openai-api-key"
+)
+```
+
+### API key priority
+
+The library checks for API keys in the following order:
+
+<Steps>
+  <Step title="Constructor parameters">
+    Keys passed directly to the `PAS2` constructor
+  </Step>
+  
+  <Step title="Hugging Face environment variables">
+    `HF_MISTRAL_API_KEY` and `HF_OPENAI_API_KEY`
+  </Step>
+  
+  <Step title="Standard environment variables">
+    `MISTRAL_API_KEY` and `OPENAI_API_KEY`
+  </Step>
+</Steps>
+
+```python
+self.mistral_api_key = mistral_api_key or os.environ.get("HF_MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
+self.openai_api_key = openai_api_key or os.environ.get("HF_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+
+if not self.mistral_api_key:
+    raise ValueError("Mistral API key is required. Set it via HF_MISTRAL_API_KEY in Hugging Face Spaces secrets or pass it as a parameter.")
+
+if not self.openai_api_key:
+    raise ValueError("OpenAI API key is required. Set it via HF_OPENAI_API_KEY in Hugging Face Spaces secrets or pass it as a parameter.")
+```
+
+### Progress callbacks
+
+Optionally provide a callback function to track progress:
+
+```python
+def progress_callback(stage, **kwargs):
+    print(f"Stage: {stage}")
+    if 'completed_responses' in kwargs:
+        print(f"Progress: {kwargs['completed_responses']}/{kwargs['total_responses']}")
+
+pas2 = PAS2(
+    mistral_api_key="your-key",
+    openai_api_key="your-key",
+    progress_callback=progress_callback
+)
+```
+
+## Core methods
+
+### Detect hallucination
+
+The main method for hallucination detection:
+
+```python
+results = pas2.detect_hallucination(
+    query="Who was the first person to land on the moon?",
+    n_paraphrases=3
+)
+```
+
+**Parameters:**
+- `query` (str): The question or prompt to analyze
+- `n_paraphrases` (int): Number of paraphrases to generate (default: 3)
+
+**Returns:**
+A dictionary containing:
+
+```python
+{
+    "original_query": str,
+    "original_response": str,
+    "paraphrased_queries": List[str],
+    "paraphrased_responses": List[str],
+    "hallucination_detected": bool,
+    "confidence_score": float,
+    "conflicting_facts": List[Dict[str, Any]],
+    "reasoning": str,
+    "summary": str
+}
+```
+
+### Generate paraphrases
+
+Generate semantic paraphrases of a query:
+
+```python
+paraphrases = pas2.generate_paraphrases(
+    query="What is the capital of France?",
+    n_paraphrases=3
+)
+# Returns: [original_query, paraphrase_1, paraphrase_2, paraphrase_3]
+```
+
+**Implementation details:**
+
+```python
+def generate_paraphrases(self, query: str, n_paraphrases: int = 3) -> List[str]:
+    messages = [
+        {
+            "role": "system",
+            "content": f"You are an expert at creating semantically equivalent paraphrases. Generate {n_paraphrases} different paraphrases of the given query that preserve the original meaning but vary in wording and structure. Return a JSON array of strings, each containing one paraphrase."
+        },
+        {
+            "role": "user",
+            "content": query
+        }
+    ]
+    
+    response = self.mistral_client.chat.complete(
+        model=self.mistral_model,
+        messages=messages,
+        response_format={"type": "json_object"}
+    )
+```
+
+**Fallback mechanism:**
+
+If paraphrase generation fails, the library provides automatic fallbacks:
+
+```python
+fallback_paraphrases = [
+    query,
+    f"Could you tell me about {query.strip('?')}?",
+    f"I'd like to know: {query}",
+    f"Please provide information on {query.strip('?')}."
+][:n_paraphrases+1]
+```
+
+### Get responses
+
+Get AI responses for multiple queries in parallel:
+
+```python
+queries = [
+    "What is the capital of France?",
+    "Tell me about France's capital city.",
+    "Which city is the capital of France?"
+]
+
+responses = pas2.get_responses(queries)
+# Returns: List of response strings
+```
+
+**Parallel execution:**
+
+The library uses thread pooling for efficient parallel API calls:
+
+```python
+def get_responses(self, queries: List[str]) -> List[str]:
+    with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+        future_to_index = {
+            executor.submit(self._get_single_response, query, i): i 
+            for i, query in enumerate(queries)
+        }
+        
+        responses = [""] * len(queries)
+        
+        for future in concurrent.futures.as_completed(future_to_index):
+            index = future_to_index[future]
+            responses[index] = future.result()
+```
+
+### Judge hallucination
+
+Use the judge model to analyze responses for inconsistencies:
+
+```python
+judgment = pas2.judge_hallucination(
+    original_query="Who invented the telephone?",
+    original_response="Alexander Graham Bell invented the telephone in 1876.",
+    paraphrased_queries=[
+        "Tell me about the invention of the telephone.",
+        "Who created the first telephone?"
+    ],
+    paraphrased_responses=[
+        "The telephone was invented by Alexander Graham Bell in 1876.",
+        "Thomas Edison invented the telephone in 1877."
+    ]
+)
+```
+
+**Returns:**
+A `HallucinationJudgment` object with:
+
+```python
+class HallucinationJudgment(BaseModel):
+    hallucination_detected: bool
+    confidence_score: float  # 0-1
+    conflicting_facts: List[Dict[str, Any]]
+    reasoning: str
+    summary: str
+```
+
+**Judge implementation:**
+
+```python
+system_prompt = """
+You are a judge evaluating whether an AI is hallucinating across different responses to semantically equivalent questions.
+Analyze all responses carefully to identify any factual inconsistencies or contradictions.
+Focus on factual discrepancies, not stylistic differences.
+A hallucination is when the AI states different facts in response to questions that are asking for the same information.
+
+Your response should be a JSON with the following fields:
+- hallucination_detected: boolean indicating whether hallucinations were found
+- confidence_score: number between 0 and 1 representing your confidence in the judgment
+- conflicting_facts: an array of objects describing any conflicting information found
+- reasoning: detailed explanation for your judgment
+- summary: a concise summary of your analysis
+"""
+
+response = self.openai_client.chat.completions.create(
+    model=self.openai_model,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Evaluate these responses for hallucinations:\n\n{context}"}
+    ],
+    response_format={"type": "json_object"}
+)
+```
+
+## Model configuration
+
+The library uses specific models for different tasks:
+
+```python
+self.mistral_model = "mistral-large-latest"  # For paraphrases and responses
+self.openai_model = "o3-mini"  # For judgment
+```
+
+## Complete example
+
+Here's a full example demonstrating the library workflow:
+
+<CodeGroup>
+```python Basic usage
+from pas2 import PAS2
+
+# Initialize
+pas2 = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
+)
+
+# Detect hallucinations
+results = pas2.detect_hallucination(
+    query="Who was the first person to land on the moon?",
+    n_paraphrases=3
+)
+
+# Check results
+if results["hallucination_detected"]:
+    print(f"Hallucination detected with {results['confidence_score']:.2f} confidence")
+    print(f"Summary: {results['summary']}")
+    print(f"Conflicting facts: {results['conflicting_facts']}")
+else:
+    print("No hallucination detected")
+```
+
+```python With progress tracking
+from pas2 import PAS2
+
+def track_progress(stage, **kwargs):
+    if stage == "generating_paraphrases":
+        print("Generating paraphrases...")
+    elif stage == "responses_progress":
+        completed = kwargs.get('completed_responses', 0)
+        total = kwargs.get('total_responses', 0)
+        print(f"Getting responses: {completed}/{total}")
+    elif stage == "judging":
+        print("Analyzing for hallucinations...")
+    elif stage == "complete":
+        print("Analysis complete!")
+
+pas2 = PAS2(
+    mistral_api_key="your-key",
+    openai_api_key="your-key",
+    progress_callback=track_progress
+)
+
+results = pas2.detect_hallucination(
+    query="What is the speed of light?",
+    n_paraphrases=5
+)
+```
+
+```python Step-by-step analysis
+from pas2 import PAS2
+
+pas2 = PAS2(
+    mistral_api_key="your-key",
+    openai_api_key="your-key"
+)
+
+query = "Who wrote 1984?"
+
+# Step 1: Generate paraphrases
+all_queries = pas2.generate_paraphrases(query, n_paraphrases=3)
+print(f"Generated {len(all_queries)} queries (including original)")
+
+# Step 2: Get responses
+all_responses = pas2.get_responses(all_queries)
+print(f"Received {len(all_responses)} responses")
+
+# Step 3: Judge for hallucinations
+judgment = pas2.judge_hallucination(
+    original_query=all_queries[0],
+    original_response=all_responses[0],
+    paraphrased_queries=all_queries[1:],
+    paraphrased_responses=all_responses[1:]
+)
+
+print(f"Hallucination detected: {judgment.hallucination_detected}")
+print(f"Confidence: {judgment.confidence_score}")
+print(f"Reasoning: {judgment.reasoning}")
+```
+</CodeGroup>
+
+## Error handling
+
+The library includes comprehensive error handling:
+
+```python
+try:
+    results = pas2.detect_hallucination(query)
+except ValueError as e:
+    # API key issues
+    print(f"Configuration error: {e}")
+except Exception as e:
+    # Other errors (API failures, network issues, etc.)
+    print(f"Error during detection: {e}")
+```
+
+**Fallback judgments:**
+
+If the judge model fails, a safe fallback is returned:
+
+```python
+return HallucinationJudgment(
+    hallucination_detected=False,
+    confidence_score=0.0,
+    conflicting_facts=[],
+    reasoning="Failed to obtain judgment from the model.",
+    summary="Analysis failed due to API error."
+)
+```
+
+## Logging
+
+Enable detailed logging to debug issues:
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+
+pas2 = PAS2(
+    mistral_api_key="your-key",
+    openai_api_key="your-key"
+)
+```
+
+Log messages include:
+- Paraphrase generation timing and results
+- Response retrieval progress
+- Judgment execution details
+- Error stack traces

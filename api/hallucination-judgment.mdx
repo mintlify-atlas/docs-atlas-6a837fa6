@@ -1,0 +1,107 @@
+---
+title: HallucinationJudgment class
+description: Pydantic model representing the judgment result from hallucination detection analysis
+---
+
+## Overview
+
+The `HallucinationJudgment` class is a Pydantic `BaseModel` that represents the structured output from the judge model when evaluating responses for hallucinations. It provides detailed information about the detection results, confidence level, and reasoning.
+
+## Class definition
+
+```python
+class HallucinationJudgment(BaseModel):
+    hallucination_detected: bool
+    confidence_score: float
+    conflicting_facts: List[Dict[str, Any]]
+    reasoning: str
+    summary: str
+```
+
+## Fields
+
+<ParamField path="hallucination_detected" type="bool" required>
+  Whether a hallucination is detected across the responses.
+</ParamField>
+
+<ParamField path="confidence_score" type="float" required>
+  Confidence score between 0 and 1 for the hallucination judgment. Higher values indicate greater confidence in the detection result.
+</ParamField>
+
+<ParamField path="conflicting_facts" type="List[Dict[str, Any]]" required>
+  List of conflicting facts found in the responses. Each dictionary describes a specific inconsistency detected between different responses.
+</ParamField>
+
+<ParamField path="reasoning" type="str" required>
+  Detailed reasoning for the judgment. Explains why the judge model concluded that hallucinations were or were not present.
+</ParamField>
+
+<ParamField path="summary" type="str" required>
+  A concise summary of the analysis. Provides a high-level overview of the judgment result.
+</ParamField>
+
+## Example usage
+
+```python
+from pas2 import HallucinationJudgment
+
+# Creating a judgment object
+judgment = HallucinationJudgment(
+    hallucination_detected=True,
+    confidence_score=0.85,
+    conflicting_facts=[
+        {
+            "fact": "Date of moon landing",
+            "response_1": "July 20, 1969",
+            "response_2": "July 21, 1969"
+        }
+    ],
+    reasoning="The responses provided different dates for the Apollo 11 moon landing, indicating a factual inconsistency.",
+    summary="Hallucination detected with high confidence due to conflicting dates."
+)
+
+print(judgment.hallucination_detected)  # True
+print(judgment.confidence_score)  # 0.85
+```
+
+## Return value from judge_hallucination
+
+This class is returned by the `judge_hallucination` method:
+
+```python
+detector = PAS2(
+    mistral_api_key="your-key",
+    openai_api_key="your-key"
+)
+
+judgment = detector.judge_hallucination(
+    original_query="What is the speed of light?",
+    original_response="The speed of light is 299,792,458 m/s.",
+    paraphrased_queries=["How fast does light travel?"],
+    paraphrased_responses=["Light travels at 300,000 km/s."]
+)
+
+if judgment.hallucination_detected:
+    print(f"Confidence: {judgment.confidence_score}")
+    print(f"Reasoning: {judgment.reasoning}")
+    for fact in judgment.conflicting_facts:
+        print(f"Conflict: {fact}")
+```
+
+## Fallback behavior
+
+When the judge model encounters an error, a fallback `HallucinationJudgment` is returned:
+
+```python
+HallucinationJudgment(
+    hallucination_detected=False,
+    confidence_score=0.0,
+    conflicting_facts=[],
+    reasoning="Failed to obtain judgment from the model.",
+    summary="Analysis failed due to API error."
+)
+```
+
+<Note>
+  All fields are required when constructing a `HallucinationJudgment` instance. The Pydantic model validates that all fields are present and have the correct types.
+</Note>

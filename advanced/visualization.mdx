@@ -1,0 +1,237 @@
+---
+title: Visualization tools and techniques
+description: Learn how to use PAS2's visualization system to display analysis results, track progress, and create interactive UI components with Gradio.
+---
+
+## Overview
+
+PAS2 provides a comprehensive visualization system built on Gradio that displays hallucination detection results, tracks progress in real-time, and enables user feedback collection. The visualization layer transforms complex analysis data into intuitive, interactive displays.
+
+## Progress tracking visualization
+
+The `ProgressTracker` class provides real-time visual feedback during the detection process.
+
+### Basic progress tracking
+
+```python
+from pas2 import ProgressTracker
+
+# Initialize tracker
+progress_tracker = ProgressTracker()
+
+# Register a callback for UI updates
+progress_tracker.register_callback(update_progress_display)
+
+# Update stage during processing
+progress_tracker.update_stage("generating_paraphrases", query=query)
+progress_tracker.update_stage("responses_progress", 
+                               completed_responses=2, 
+                               total_responses=4)
+```
+
+### Available progress stages
+
+The system tracks these predefined stages:
+
+| Stage | Description | Progress % |
+|-------|-------------|------------|
+| `idle` | Ready state | 0% |
+| `starting` | Initializing process | 5% |
+| `generating_paraphrases` | Creating query variations | 15% |
+| `paraphrases_complete` | Paraphrases ready | 30% |
+| `getting_responses` | Requesting API responses | 35% |
+| `responses_progress` | Incremental response tracking | 40-65% |
+| `responses_complete` | All responses received | 65% |
+| `judging` | Analyzing for hallucinations | 70% |
+| `complete` | Process finished | 100% |
+| `error` | Error occurred | 100% |
+
+### Parallel response tracking
+
+PAS2 retrieves responses in parallel using `ThreadPoolExecutor` and tracks completion:
+
+```python pas2.py
+def get_responses(self, queries: List[str]) -> List[str]:
+    """Get responses from Mistral API for each query in parallel"""
+    with ThreadPoolExecutor(max_workers=min(len(queries), 5)) as executor:
+        future_to_index = {
+            executor.submit(self._get_single_response, query, i): i 
+            for i, query in enumerate(queries)
+        }
+        
+        responses = [""] * len(queries)
+        completed_count = 0
+        
+        for future in concurrent.futures.as_completed(future_to_index):
+            index = future_to_index[future]
+            responses[index] = future.result()
+            
+            completed_count += 1
+            if self.progress_callback:
+                self.progress_callback("responses_progress", 
+                                    completed_responses=completed_count, 
+                                    total_responses=len(queries))
+        
+        return responses
+```
+
+<Note>
+The progress callback updates asynchronously as responses arrive, providing real-time feedback even when API calls complete out of order.
+</Note>
+
+## Results visualization
+
+### HTML result formatting
+
+Results are displayed using styled HTML components:
+
+```python
+html_output = f"""
+<div class="container">
+    <h2 class="title">Hallucination Detection Results</h2>
+    
+    <div class="stats-section">
+        <div class="stat-item">
+            <div class="stat-value">{'Yes' if hallucination_detected else 'No'}</div>
+            <div class="stat-label">Hallucination Detected</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{confidence:.2f}</div>
+            <div class="stat-label">Confidence Score</div>
+        </div>
+    </div>
+    
+    <div class="{'hallucination-positive' if hallucination_detected else 'hallucination-negative'}">
+        <h3>Analysis Summary</h3>
+        <p>{summary}</p>
+    </div>
+</div>
+"""
+```
+
+### Styling classes
+
+PAS2 includes predefined CSS classes for consistent visualization:
+
+- `hallucination-positive` - Red styling for detected hallucinations
+- `hallucination-negative` - Green styling for clean results
+- `response-box` - Container for individual responses
+- `stats-section` - Grid layout for statistics
+- `progress-bar-container` - Progress bar wrapper
+
+## Interactive components
+
+### Example query buttons
+
+Provide preset queries for quick testing:
+
+```python
+example_queries = [
+    "Who was the first person to land on the moon?",
+    "What is the capital of France?",
+    "How many planets are in our solar system?"
+]
+
+for example in example_queries:
+    example_btn = gr.Button(example, elem_classes=["example-query"])
+    example_btn.click(
+        fn=set_example_query,
+        inputs=[gr.Textbox(value=example, visible=False)],
+        outputs=[query_input]
+    )
+```
+
+### Feedback interface
+
+Collect user feedback on detection accuracy:
+
+```python
+with gr.Accordion("Provide Feedback", open=False) as feedback_accordion:
+    feedback_input = gr.Radio(
+        label="Is the hallucination detection accurate?",
+        choices=[
+            "Yes, correct detection",
+            "No, incorrectly flagged hallucination",
+            "No, missed hallucination",
+            "Unsure/Other"
+        ]
+    )
+    
+    feedback_text = gr.Textbox(
+        label="Additional comments (optional)",
+        placeholder="Please provide any additional observations...",
+        lines=2
+    )
+```
+
+## Progress animation
+
+### Pulsing indicators
+
+The tracker includes a pulsing animation for long-running operations:
+
+```python pas2.py
+def _pulse_progress(self):
+    """Animate the progress bar to show activity"""
+    pulse_stages = ["⋯", "⋯⋯", "⋯⋯⋯", "⋯⋯", "⋯"]
+    i = 0
+    while not self._stop_event.is_set():
+        with self._lock:
+            if self.stage not in ["idle", "complete", "error"]:
+                status_base = self.stage_data['status'].split("...")[0]
+                self.stage_data['status'] = f"{status_base}... {pulse_stages[i]}"
+                
+                if self._status_callback:
+                    self._status_callback(self.get_html_status())
+        
+        i = (i + 1) % len(pulse_stages)
+        time.sleep(0.3)
+```
+
+<Tip>
+Use `start_pulsing()` for indeterminate operations and `stop_pulsing()` when switching to incremental progress updates.
+</Tip>
+
+## Statistics dashboard
+
+Display aggregate feedback statistics:
+
+```python
+stats = detector.get_feedback_stats()
+
+stats_html = f"""
+<div class="stats-section">
+    <div class="stat-item">
+        <div class="stat-value">{stats['total_feedback']}</div>
+        <div class="stat-label">Total Feedback</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{stats['hallucinations_detected']}</div>
+        <div class="stat-label">Hallucinations Found</div>
+    </div>
+    <div class="stat-item">
+        <div class="stat-value">{stats['average_confidence']}</div>
+        <div class="stat-label">Avg. Confidence</div>
+    </div>
+</div>
+"""
+```
+
+## Custom themes
+
+PAS2 uses Gradio's Soft theme with custom CSS:
+
+```python
+with gr.Blocks(css=css, theme=gr.themes.Soft()) as interface:
+    # Interface components
+```
+
+The custom CSS provides:
+- Consistent color scheme (Material Design blues)
+- Responsive layout containers
+- Smooth transitions and animations
+- Accessible color contrasts
+
+<Note>
+All visualization components are designed to work seamlessly with Gradio's reactive update system, ensuring real-time UI updates without page refreshes.
+</Note>

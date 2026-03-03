@@ -1,0 +1,200 @@
+---
+title: detect_hallucination method
+description: Main method for detecting hallucinations by analyzing responses to paraphrased queries
+---
+
+## Overview
+
+The `detect_hallucination` method is the primary interface for hallucination detection in PAS2. It orchestrates the complete detection pipeline: generating paraphrases, fetching responses, and judging for hallucinations.
+
+## Method signature
+
+```python
+PAS2.detect_hallucination(query: str, n_paraphrases: int = 3) -> Dict
+```
+
+## Parameters
+
+<ParamField path="query" type="str" required>
+  The user query to analyze for potential hallucinations.
+</ParamField>
+
+<ParamField path="n_paraphrases" type="int" default="3">
+  Number of paraphrased versions to generate for comparison.
+</ParamField>
+
+## Return value
+
+<ResponseField name="return" type="Dict">
+  Dictionary containing complete detection results with the following keys:
+</ResponseField>
+
+<ResponseField name="original_query" type="str">
+  The input query exactly as provided.
+</ResponseField>
+
+<ResponseField name="original_response" type="str">
+  The model's response to the original query.
+</ResponseField>
+
+<ResponseField name="paraphrased_queries" type="List[str]">
+  List of paraphrased versions of the query.
+</ResponseField>
+
+<ResponseField name="paraphrased_responses" type="List[str]">
+  List of model responses to the paraphrased queries.
+</ResponseField>
+
+<ResponseField name="hallucination_detected" type="bool">
+  Whether hallucinations were detected across the responses.
+</ResponseField>
+
+<ResponseField name="confidence_score" type="float">
+  Confidence score between 0 and 1 for the detection result.
+</ResponseField>
+
+<ResponseField name="conflicting_facts" type="List[Dict[str, Any]]">
+  List of conflicting facts identified by the judge model.
+</ResponseField>
+
+<ResponseField name="reasoning" type="str">
+  Detailed explanation of the judgment from the judge model.
+</ResponseField>
+
+<ResponseField name="summary" type="str">
+  Concise summary of the hallucination analysis.
+</ResponseField>
+
+## Detection pipeline
+
+The method executes three main steps:
+
+### Step 1: Generate paraphrases
+
+Calls `generate_paraphrases` to create semantically equivalent versions of the query.
+
+```python
+all_queries = self.generate_paraphrases(query, n_paraphrases)
+# Returns: [original_query, paraphrase_1, paraphrase_2, ...]
+```
+
+### Step 2: Fetch responses
+
+Gets responses from the model for each query (original + paraphrases).
+
+```python
+for i, q in enumerate(all_queries):
+    response = self._get_single_response(q, index=i)
+    all_responses.append(response)
+```
+
+### Step 3: Judge for hallucinations
+
+Analyzes all responses using the judge model to detect inconsistencies.
+
+```python
+judgment = self.judge_hallucination(
+    original_query=original_query,
+    original_response=original_response,
+    paraphrased_queries=paraphrased_queries,
+    paraphrased_responses=paraphrased_responses
+)
+```
+
+## Example usage
+
+```python
+from pas2 import PAS2
+
+detector = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
+)
+
+# Detect hallucinations with default paraphrases
+results = detector.detect_hallucination(
+    query="Who was the first person to land on the moon?"
+)
+
+print(f"Query: {results['original_query']}")
+print(f"Hallucination detected: {results['hallucination_detected']}")
+print(f"Confidence: {results['confidence_score']:.2f}")
+print(f"Summary: {results['summary']}")
+
+if results['hallucination_detected']:
+    print("\nConflicting facts:")
+    for fact in results['conflicting_facts']:
+        print(f"  - {fact}")
+```
+
+## Example with custom paraphrases
+
+```python
+# Generate more paraphrases for higher confidence
+results = detector.detect_hallucination(
+    query="What is the speed of light?",
+    n_paraphrases=5
+)
+
+print(f"Analyzed {len(results['paraphrased_queries'])} paraphrases")
+print(f"Confidence: {results['confidence_score']}")
+```
+
+## Progress tracking
+
+If a `progress_callback` is registered, the method reports progress through multiple stages:
+
+```python
+def track_progress(stage, **kwargs):
+    print(f"Stage: {stage}")
+    if stage == "paraphrases_complete":
+        print(f"  Generated {kwargs['count']} queries")
+    elif stage == "responses_progress":
+        print(f"  Response {kwargs['completed']}/{kwargs['total']}")
+
+detector = PAS2(
+    mistral_api_key="key",
+    openai_api_key="key",
+    progress_callback=track_progress
+)
+
+results = detector.detect_hallucination("Query here")
+```
+
+## Progress stages
+
+The method emits the following progress events:
+
+- `starting`: Detection process initiated
+- `generating_paraphrases`: Creating paraphrased queries
+- `paraphrases_complete`: Paraphrases generated successfully
+- `getting_responses`: Fetching model responses
+- `responses_progress`: Individual response received
+- `responses_complete`: All responses collected
+- `judging`: Analyzing responses for hallucinations
+- `complete`: Detection finished
+
+<Note>
+  The method processes responses sequentially to provide fine-grained progress updates. For parallel response fetching, use the `get_responses` method directly.
+</Note>
+
+## Error handling
+
+The method is designed to be robust:
+
+- Paraphrase generation failures trigger fallback paraphrases
+- Individual response errors return error messages for those specific queries
+- Judge model errors return a fallback judgment with `confidence_score=0.0`
+
+<Warning>
+  All API calls are logged. Check application logs for detailed error information when detection fails.
+</Warning>
+
+## Performance considerations
+
+- Total time: ~10-20 seconds for 3 paraphrases
+- Time breakdown:
+  - Paraphrase generation: 1-3 seconds
+  - Response fetching: 5-10 seconds (sequential)
+  - Judgment: 2-5 seconds
+- Increasing `n_paraphrases` proportionally increases response fetching time

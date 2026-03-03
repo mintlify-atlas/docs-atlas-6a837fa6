@@ -1,0 +1,312 @@
+---
+title: Feedback storage system
+description: Understand PAS2's SQLite-based feedback storage, data persistence, and how to collect and analyze user feedback on hallucination detection results.
+---
+
+## Overview
+
+PAS2 includes a persistent feedback storage system built on SQLite. The system stores detection results and user feedback, enabling analysis of detection accuracy and continuous improvement.
+
+## Database initialization
+
+The system automatically creates and initializes the database on startup.
+
+### Persistent storage location
+
+```python pas2.py
+class HallucinationDetectorApp:
+    def __init__(self):
+        self.pas2 = None
+        # Use persistent storage directory
+        self.data_dir = "/data"
+        self.db_path = os.path.join(self.data_dir, "feedback.db")
+        self._initialize_database()
+```
+
+<Note>
+PAS2 attempts to use `/data` for persistent storage (ideal for Hugging Face Spaces). If unavailable, it falls back to a temporary directory.
+</Note>
+
+### Database schema
+
+The feedback table stores comprehensive detection data:
+
+```python pas2.py
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT,
+        original_query TEXT,
+        original_response TEXT,
+        paraphrased_queries TEXT,
+        paraphrased_responses TEXT,
+        hallucination_detected INTEGER,
+        confidence_score REAL,
+        conflicting_facts TEXT,
+        reasoning TEXT,
+        summary TEXT,
+        user_feedback TEXT
+    )
+''')
+```
+
+### Schema fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | INTEGER | Auto-incrementing primary key |
+| `timestamp` | TEXT | ISO format timestamp |
+| `original_query` | TEXT | User's original question |
+| `original_response` | TEXT | First response from model |
+| `paraphrased_queries` | TEXT | JSON array of paraphrased questions |
+| `paraphrased_responses` | TEXT | JSON array of paraphrase responses |
+| `hallucination_detected` | INTEGER | 1 if hallucination found, 0 otherwise |
+| `confidence_score` | REAL | Judge's confidence (0-1) |
+| `conflicting_facts` | TEXT | JSON array of conflicts |
+| `reasoning` | TEXT | Judge's detailed analysis |
+| `summary` | TEXT | Brief summary of findings |
+| `user_feedback` | TEXT | User's feedback on accuracy |
+
+## Fallback handling
+
+The system gracefully handles storage permission issues:
+
+```python pas2.py
+try:
+    os.makedirs(self.data_dir, exist_ok=True)
+    conn = sqlite3.connect(self.db_path)
+    # ... create table ...
+except Exception as e:
+    logger.error(f"Error initializing database: {str(e)}", exc_info=True)
+    # Fallback to temporary directory
+    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_data")
+    os.makedirs(temp_dir, exist_ok=True)
+    self.db_path = os.path.join(temp_dir, "feedback.db")
+    logger.warning(f"Using fallback database location: {self.db_path}")
+```
+
+<Tip>
+Always check logs for the actual database location. In containerized environments, verify the persistent volume is mounted to `/data`.
+</Tip>
+
+## Saving feedback
+
+Feedback is saved after each detection run when users submit feedback.
+
+### Save operation
+
+```python pas2.py
+def save_feedback(self, results, feedback):
+    """Save results and user feedback to SQLite database"""
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
+    
+    data = (
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        results.get('original_query', ''),
+        results.get('original_response', ''),
+        str(results.get('paraphrased_queries', [])),
+        str(results.get('paraphrased_responses', [])),
+        1 if results.get('hallucination_detected', False) else 0,
+        results.get('confidence_score', 0.0),
+        str(results.get('conflicting_facts', [])),
+        results.get('reasoning', ''),
+        results.get('summary', ''),
+        feedback
+    )
+    
+    cursor.execute('''
+        INSERT INTO feedback (
+            timestamp, original_query, original_response,
+            paraphrased_queries, paraphrased_responses,
+            hallucination_detected, confidence_score,
+            conflicting_facts, reasoning, summary, user_feedback
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data)
+    
+    conn.commit()
+    conn.close()
+```
+
+### Combined feedback format
+
+User feedback combines selection and free text:
+
+```python
+def combine_feedback(fb_input, fb_text, results):
+    combined_feedback = f"{fb_input}: {fb_text}" if fb_text else fb_input
+    if not results:
+        return "No results to attach feedback to.", ""
+    
+    response = detector.save_feedback(results, combined_feedback)
+    stats = detector.get_feedback_stats()
+    # ... update stats display ...
+```
+
+Example stored feedback:
+```
+Yes, correct detection: The system accurately identified the factual inconsistency
+```
+
+## Retrieving statistics
+
+Query aggregate statistics from the feedback database.
+
+### Statistics query
+
+```python pas2.py
+def get_feedback_stats(self):
+    """Get statistics about collected feedback"""
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
+    
+    # Get total feedback count
+    cursor.execute("SELECT COUNT(*) FROM feedback")
+    total_count = cursor.fetchone()[0]
+    
+    # Get hallucination detection stats
+    cursor.execute("""
+        SELECT hallucination_detected, COUNT(*) 
+        FROM feedback 
+        GROUP BY hallucination_detected
+    """)
+    detection_stats = dict(cursor.fetchall())
+    
+    # Get average confidence score
+    cursor.execute("SELECT AVG(confidence_score) FROM feedback")
+    avg_confidence = cursor.fetchone()[0] or 0
+    
+    conn.close()
+    
+    return {
+        "total_feedback": total_count,
+        "hallucinations_detected": detection_stats.get(1, 0),
+        "no_hallucinations": detection_stats.get(0, 0),
+        "average_confidence": round(avg_confidence, 2)
+    }
+```
+
+### Returned statistics
+
+```python
+{
+    "total_feedback": 147,
+    "hallucinations_detected": 23,
+    "no_hallucinations": 124,
+    "average_confidence": 0.87
+}
+```
+
+## Data persistence best practices
+
+### Volume mounting (Docker/Hugging Face Spaces)
+
+For persistent storage across restarts:
+
+```yaml
+volumes:
+  - /path/on/host:/data
+```
+
+The database will persist at `/data/feedback.db`.
+
+### Backup strategy
+
+Regularly backup the SQLite database:
+
+```bash
+sqlite3 /data/feedback.db ".backup '/backup/feedback_$(date +%Y%m%d).db'"
+```
+
+### Database maintenance
+
+Periodically optimize the database:
+
+```python
+import sqlite3
+
+conn = sqlite3.connect('/data/feedback.db')
+conn.execute('VACUUM')
+conn.close()
+```
+
+<Tip>
+Run `VACUUM` during low-traffic periods to reclaim space and optimize query performance.
+</Tip>
+
+## Analyzing feedback data
+
+### Query examples
+
+Find cases where users disagreed with detection:
+
+```sql
+SELECT original_query, hallucination_detected, user_feedback
+FROM feedback
+WHERE user_feedback LIKE '%incorrectly flagged%'
+   OR user_feedback LIKE '%missed hallucination%';
+```
+
+Analyze confidence scores for false positives:
+
+```sql
+SELECT AVG(confidence_score) as avg_confidence
+FROM feedback
+WHERE hallucination_detected = 1
+  AND user_feedback LIKE '%incorrectly flagged%';
+```
+
+Identify common hallucination patterns:
+
+```sql
+SELECT original_query, COUNT(*) as frequency
+FROM feedback
+WHERE hallucination_detected = 1
+GROUP BY original_query
+ORDER BY frequency DESC
+LIMIT 10;
+```
+
+## Privacy considerations
+
+The feedback system stores query content and responses:
+
+<Note>
+The system does not collect personally identifiable information (PII). However, users may inadvertently include sensitive data in queries. Implement data retention policies and anonymization if required by your use case.
+</Note>
+
+### Data retention
+
+Implement automatic cleanup of old records:
+
+```python
+import sqlite3
+from datetime import datetime, timedelta
+
+conn = sqlite3.connect('/data/feedback.db')
+cursor = conn.cursor()
+
+# Delete records older than 90 days
+retention_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+cursor.execute("DELETE FROM feedback WHERE timestamp < ?", (retention_date,))
+
+conn.commit()
+conn.close()
+```
+
+## Error handling
+
+The save operation includes comprehensive error handling:
+
+```python
+try:
+    logger.info("Saving user feedback: %s", feedback)
+    # ... save operation ...
+    logger.info("Feedback saved successfully to database")
+    return "Feedback saved successfully!"
+except Exception as e:
+    logger.error("Error saving feedback: %s", str(e), exc_info=True)
+    return f"Error saving feedback: {str(e)}"
+```
+
+This ensures users receive clear feedback even when database operations fail.
