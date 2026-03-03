@@ -23,26 +23,26 @@ This page tracks the major updates, features, and improvements to PAS2.
 
 #### Core capabilities
 
-- Generates paraphrased versions of input queries
-- Evaluates responses using semantic similarity analysis
-- Provides match percentage and similarity metrics
-- Includes visualization tools for similarity matrices
-- Web interface for interactive testing
+- Generates paraphrased versions of input queries using Mistral API
+- Evaluates responses using model-as-judge approach
+- Provides confidence scores and detailed reasoning
+- Identifies specific conflicting facts across responses
+- Web interface for interactive testing (Gradio)
 - Benchmarking capabilities for bulk evaluation
+- Parallel response generation for improved performance
 
 #### Technical specifications
 
-- Default model: gpt-4-2024-08-06
-- Default embedding model: text-embedding-3-small
-- Adjustable similarity and match percentage thresholds
+- Response model: Mistral Large (`mistral-large-latest`)
+- Judge model: OpenAI o3-mini
+- Paraphrase-based detection approach
 - SQLite database for persistent storage
 
 #### Output formats
 
-- Similarity matrix plots (PNG)
-- Match matrix plots (PNG)
 - Benchmark results (CSV, TXT)
-- User feedback logs (XLSX)
+- Feedback logs stored in SQLite database
+- Real-time statistics dashboard
 
 ### Deployment improvements
 

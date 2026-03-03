@@ -80,13 +80,18 @@ You can use PAS2 programmatically:
 ```python
 from pas2 import PAS2
 
-detector = PAS2()
-hallucinated, response, questions, answers = detector.detect_hallucination(
-    "your question",
-    n_paraphrases=5,
-    similarity_threshold=0.9,
-    match_percentage_threshold=0.7
+detector = PAS2(
+    mistral_api_key="your-mistral-key",
+    openai_api_key="your-openai-key"
 )
+
+results = detector.detect_hallucination(
+    query="your question",
+    n_paraphrases=5
+)
+
+print(f"Hallucination detected: {results['hallucination_detected']}")
+print(f"Confidence: {results['confidence_score']}")
 ```
 </Accordion>
 
