@@ -1,0 +1,130 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "PAS2",
+  "projectDescription": "A Python-based hallucination detection system that evaluates AI response consistency through paraphrasing and semantic similarity analysis",
+  "theme": "aspen",
+  "primaryColor": "#5B21B6",
+  "lightColor": "#8B5CF6",
+  "darkColor": "#4C1D95",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "how-it-works"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/paraphrasing",
+              "concepts/hallucination-detection",
+              "concepts/model-as-judge"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "guides/installation",
+              "guides/configuration",
+              "guides/api-keys"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "guides/web-interface",
+              "guides/python-library",
+              "guides/benchmarking"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "guides/huggingface-spaces",
+              "guides/local-deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/pas2-class",
+              "api/hallucination-judgment",
+              "api/detector-app"
+            ]
+          },
+          {
+            "group": "Methods",
+            "pages": [
+              "api/generate-paraphrases",
+              "api/detect-hallucination",
+              "api/judge-hallucination"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-usage",
+              "examples/custom-configuration",
+              "examples/batch-processing"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/visualization",
+              "advanced/feedback-system",
+              "advanced/performance-tuning"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "contributing",
+              "changelog",
+              "faq"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Paraphrase-based hallucination detection",
+    "Multi-model architecture with Mistral and OpenAI",
+    "Real-time progress tracking and analysis",
+    "Interactive Gradio web interface",
+    "Persistent feedback storage and statistics",
+    "Semantic similarity analysis",
+    "Benchmarking and visualization tools"
+  ],
+  "publicApiSurface": [
+    "PAS2.generate_paraphrases()",
+    "PAS2.get_responses()",
+    "PAS2.detect_hallucination()",
+    "PAS2.judge_hallucination()",
+    "HallucinationDetectorApp",
+    "create_interface()",
+    "HallucinationJudgment"
+  ]
+}
